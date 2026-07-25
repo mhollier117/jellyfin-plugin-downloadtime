@@ -63,3 +63,7 @@ public sealed record RemoteMovie(int TmdbId, string Title, DateTimeOffset? Relea
 public sealed record CollectionCatalog(int CollectionId, string Name, IReadOnlyList<RemoteMovie> Movies);
 
 public sealed record Placement(int Season, int Number);
+
+public sealed record ExistingPlaceholder(Guid ItemId, int? Season, int? Number, string Marker);
+public sealed record PlaceholderCreate(int Season, int Number, string Marker, string? Title, DateTimeOffset? AiredAt);
+public sealed record PlaceholderPlan(IReadOnlyList<PlaceholderCreate> Creates, IReadOnlyList<Guid> Deletes);
