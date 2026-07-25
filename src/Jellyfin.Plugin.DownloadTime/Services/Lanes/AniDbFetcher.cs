@@ -52,7 +52,16 @@ public class AniDbFetcher : IAniDbSource
             {
                 return FetchOutcome.Fail($"AniDB HTTP {(int)resp.StatusCode}");
             }
-            var xml = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var bytes = await resp.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            // AniDB serves gzip-compressed XML regardless of Accept-Encoding.
+            if (bytes.Length > 2 && bytes[0] == 0x1F && bytes[1] == 0x8B)
+            {
+                using var gz = new System.IO.Compression.GZipStream(new MemoryStream(bytes), System.IO.Compression.CompressionMode.Decompress);
+                using var outMs = new MemoryStream();
+                await gz.CopyToAsync(outMs, ct).ConfigureAwait(false);
+                bytes = outMs.ToArray();
+            }
+            var xml = System.Text.Encoding.UTF8.GetString(bytes);
             var (catalog, error) = ParseAnime(xml, _clock);
             return error is null ? FetchOutcome.Ok(catalog!) : FetchOutcome.Fail(error);
         }

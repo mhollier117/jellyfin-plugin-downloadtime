@@ -89,6 +89,29 @@ public class AniDbFetcherTests
     }
 
     [Fact]
+    public async Task GzippedResponse_IsDecompressed()
+    {
+        // AniDB's httpapi serves gzip-compressed XML regardless of Accept-Encoding
+        // (observed live 2026-07-25: parser saw 0x1F magic byte). Fetcher must
+        // detect the gzip signature and decompress before parsing.
+        var raw = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "fixtures", "anidb-anime-18164.xml"));
+        using var ms = new MemoryStream();
+        using (var gz = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionMode.Compress, leaveOpen: true))
+        {
+            gz.Write(raw);
+        }
+        var gzBytes = ms.ToArray();
+        var handler = new FakeHttpHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(gzBytes),
+        });
+        var f = Make(handler, new FakeClock(Now));
+        var outcome = await f.FetchByAnimeIdAsync("18164", CancellationToken.None);
+        Assert.Null(outcome.Error);
+        Assert.Equal(5, outcome.Catalog!.Episodes.Count);
+    }
+
+    [Fact]
     public async Task Http503_Fails()
     {
         var handler = new FakeHttpHandler(_ => FakeHttpHandler.Status(System.Net.HttpStatusCode.ServiceUnavailable));
