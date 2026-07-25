@@ -32,9 +32,13 @@ Tvdb > Tmdb > Imdb.
   public page listing all episodes (season/episode numbers + air dates) in one
   request per series. Scrape with HtmlAgilityPack, browser User-Agent,
   throttled (Ronin precedent: `ResolveEpisodeNumber.cs` scrapes the same site).
-- Match owned↔remote by `(season, episode)` tuple (TVmaze/TVDB pages expose no
-  usable per-episode ID join to local `Tvdb` episode IDs from a single page —
-  aired-order tuples are correct for TVDB-identified folders by definition).
+- Match owned↔remote **by TVDB episode ID first** — the all-seasons page's
+  per-episode links (`/series/{slug}/episodes/{episodeId}`) carry the same
+  episode IDs stamped on local items as `ProviderIds["Tvdb"]` (verified
+  2026-07-25 against the live page for American Gods) — with `(season,
+  episode)` tuple matching as fallback for local items lacking the ID.
+- Numeric-ID → slug resolution via `thetvdb.com/dereferrer/series/{id}`
+  (301 redirect to the slug URL; verified live).
 - **Fallback:** if scraping fails (markup change, HTTP error), automatically
   use TVmaze `lookup/shows?thetvdb={id}` → `/shows/{id}/episodes` (free,
   keyless, independent database cross-referenced by TVDB ID). Report marks the
