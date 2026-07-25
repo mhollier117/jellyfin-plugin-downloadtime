@@ -17,6 +17,17 @@ const post = async (p) => fetch(cfg.baseUrl + p, { method: 'POST', headers: H })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const die = (msg) => { console.error('FAIL:', msg); process.exit(1); };
 
+// renameSync fails with EXDEV across drives (library on D:, repo on C:).
+function moveFile(src, dest) {
+  try {
+    fs.renameSync(src, dest);
+  } catch (e) {
+    if (e.code !== 'EXDEV') throw e;
+    fs.copyFileSync(src, dest);
+    fs.rmSync(src);
+  }
+}
+
 async function findSeries() {
   const r = await get(`/Items?IncludeItemTypes=Series&Recursive=true&SearchTerm=${encodeURIComponent(cfg.target.seriesName)}&Fields=Path`);
   if (!r.Items?.length) die('series not found');
@@ -29,9 +40,16 @@ async function findEpisodeFile(series) {
   return ep?.Path;
 }
 
-async function libraryRefresh() {
+// Trigger a library scan and poll until the target episode reaches the wanted
+// presence state (full refresh includes the 65k-item Collection 2 — can take minutes).
+async function libraryRefreshUntil(series, wantPresent) {
   await post('/Library/Refresh');
-  await sleep(45000); // library scan settle time on VMHOLLIER
+  for (let i = 0; i < 32; i++) {
+    await sleep(15000);
+    const present = !!(await findEpisodeFile(series));
+    if (present === wantPresent) return;
+  }
+  die(`library refresh did not converge (wantPresent=${wantPresent}) within 8 min`);
 }
 
 async function pluginScanAndReport() {
@@ -61,16 +79,19 @@ if (mode === 'baseline') {
   if (hit) die('target episode reported missing while file present');
   console.log('BASELINE PASS');
 } else if (mode === 'plant') {
-  const file = await findEpisodeFile(series);
-  if (!file) die('target episode file not found');
-  fs.mkdirSync(cfg.holdingDir, { recursive: true });
-  const dest = path.join(cfg.holdingDir, path.basename(file));
-  fs.renameSync(file, dest);
-  fs.writeFileSync(path.join(cfg.holdingDir, 'origin.json'), JSON.stringify({ file }));
-  console.log('moved', file, '->', dest);
-  await libraryRefresh();
-  const gone = await findEpisodeFile(series);
-  if (gone) die('episode still present after refresh');
+  const originPath = path.join(cfg.holdingDir, 'origin.json');
+  if (fs.existsSync(originPath) && !fs.existsSync(JSON.parse(fs.readFileSync(originPath)).file)) {
+    console.log('file already in holding; resuming refresh wait');
+  } else {
+    const file = await findEpisodeFile(series);
+    if (!file) die('target episode file not found');
+    fs.mkdirSync(cfg.holdingDir, { recursive: true });
+    const dest = path.join(cfg.holdingDir, path.basename(file));
+    moveFile(file, dest);
+    fs.writeFileSync(originPath, JSON.stringify({ file }));
+    console.log('moved', file, '->', dest);
+  }
+  await libraryRefreshUntil(series, false);
   console.log('PLANT DONE');
 } else if (mode === 'assert-gap') {
   const report = await pluginScanAndReport();
@@ -85,8 +106,8 @@ if (mode === 'baseline') {
   console.log('ASSERT-GAP PASS');
 } else if (mode === 'restore') {
   const { file } = JSON.parse(fs.readFileSync(path.join(cfg.holdingDir, 'origin.json')));
-  fs.renameSync(path.join(cfg.holdingDir, path.basename(file)), file);
-  await libraryRefresh();
+  moveFile(path.join(cfg.holdingDir, path.basename(file)), file);
+  await libraryRefreshUntil(series, true);
   const report = await pluginScanAndReport();
   const s = seriesEntry(report, cfg.target.seriesName);
   if ((s.Missing || []).length) die(`still missing after restore: ${JSON.stringify(s.Missing)}`);

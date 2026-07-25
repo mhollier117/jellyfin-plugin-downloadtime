@@ -80,6 +80,17 @@ public class PlacerTests
     }
 
     [Fact]
+    public void AnchorAtSameRemoteNumber_ReturnsNull_NotThrow()
+    {
+        // Live crash 2026-07-25: owned anchor whose remote number EQUALS the
+        // missing episode's number (e.g. special "S1" parsed as 1 vs regular
+        // ep 1) left below==above==null -> "Nullable object must have a value".
+        var cat = AniCat(A(1, "h1"), new RemoteEpisode(null, 1, "h1s", null, true, "special one"));
+        var owned = new[] { OA(1, 7, "h1s") }; // anchors at RemoteN=1, target is also 1
+        Assert.Null(Placer.Infer(cat.Episodes[0], owned, cat));
+    }
+
+    [Fact]
     public void NoAnchors_ReturnsNull()
     {
         var cat = AniCat(A(1, "g1"));

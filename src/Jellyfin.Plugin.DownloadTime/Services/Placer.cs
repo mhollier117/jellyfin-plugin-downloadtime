@@ -64,7 +64,13 @@ public static class Placer
             var b = below.Value;
             return new Placement(b.LocalS, b.LocalN + (target - b.RemoteN));
         }
-        var up = above!.Value;
+        if (!above.HasValue)
+        {
+            // Every anchor sits AT the target's remote number (e.g. a special
+            // sharing the number) — no direction to extrapolate from.
+            return null;
+        }
+        var up = above.Value;
         var n = up.LocalN - (up.RemoteN - target);
         return n >= 1 ? new Placement(up.LocalS, n) : null;
     }
