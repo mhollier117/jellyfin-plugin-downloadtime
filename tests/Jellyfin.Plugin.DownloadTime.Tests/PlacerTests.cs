@@ -80,6 +80,27 @@ public class PlacerTests
     }
 
     [Fact]
+    public void SeasonfulIdCatalog_PlacesAtRemoteSeasonEpisode_NotAnchorMath()
+    {
+        // Live bug 2026-07-25: TVDB catalogs have episode IDs AND per-season
+        // numbers; anchor math built for season-less AniDB entries matched a
+        // Season-1 anchor ("number 4") for missing S2E5 and placed it at S1E5.
+        // Season-ful catalogs must place at the remote (Season, Number) directly.
+        var cat = new RemoteCatalog("Tvdb", "Tvdb", "296762", true, new[]
+        {
+            new RemoteEpisode(1, 4, "t14", null, false, null),
+            new RemoteEpisode(1, 5, "t15", null, false, null),
+            new RemoteEpisode(2, 5, "t25", null, false, "Akane No Mai"),
+        });
+        var owned = new[]
+        {
+            new OwnedEpisode(1, 4, null, new Dictionary<string, string> { ["Tvdb"] = "t14" }, null),
+            new OwnedEpisode(1, 5, null, new Dictionary<string, string> { ["Tvdb"] = "t15" }, null),
+        };
+        Assert.Equal(new Placement(2, 5), Placer.Infer(cat.Episodes[2], owned, cat));
+    }
+
+    [Fact]
     public void AnchorAtSameRemoteNumber_ReturnsNull_NotThrow()
     {
         // Live crash 2026-07-25: owned anchor whose remote number EQUALS the

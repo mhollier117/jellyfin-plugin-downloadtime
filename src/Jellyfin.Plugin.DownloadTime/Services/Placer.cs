@@ -11,14 +11,16 @@ public static class Placer
 {
     public static Placement? Infer(RemoteEpisode missing, IReadOnlyList<OwnedEpisode> owned, RemoteCatalog remote)
     {
-        if (remote.IdProviderKey is null)
+        // Season-ful episodes (tuple catalogs AND season-ful ID catalogs like
+        // TVDB) place at the remote (Season, Number) directly — anchor math is
+        // only meaningful for season-less absolute numbering (AniDB entries),
+        // where the local scheme may be merged/split.
+        if (missing.Season.HasValue && missing.Number.HasValue)
         {
-            return missing.Season.HasValue && missing.Number.HasValue
-                ? new Placement(missing.Season.Value, missing.Number.Value)
-                : null;
+            return new Placement(missing.Season.Value, missing.Number.Value);
         }
 
-        if (!missing.Number.HasValue)
+        if (remote.IdProviderKey is null || !missing.Number.HasValue)
         {
             return null;
         }

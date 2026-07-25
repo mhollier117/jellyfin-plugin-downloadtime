@@ -18,8 +18,10 @@ async function series() {
   return r.Items[0];
 }
 async function placeholders(sid) {
-  const eps = await get(`/Shows/${sid}/Episodes?Fields=ProviderIds,LocationType`);
-  return eps.Items.filter((e) => e.LocationType === 'Virtual' && e.ProviderIds && e.ProviderIds.DownloadTime);
+  // /Shows/{id}/Episodes hides virtual items without a user with
+  // DisplayMissingEpisodes; the generic /Items query does not.
+  const r = await get(`/Items?ParentId=${sid}&IncludeItemTypes=Episode&Recursive=true&IsVirtualItem=true&Fields=ProviderIds`);
+  return (r.Items || []).filter((e) => e.ProviderIds && e.ProviderIds.DownloadTime);
 }
 async function runScanTask() {
   const res = await post('/DownloadTime/Scan?fullRefresh=true');
