@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">12.0</JellyfinVersion>
+    <AssemblyName>Jellyfin.Plugin.DownloadTime</AssemblyName>
+    <RootNamespace>Jellyfin.Plugin.DownloadTime</RootNamespace>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>CS1591</NoWarn>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <PropertyGroup Condition="$(JellyfinVersion.StartsWith('12.'))">
+    <TargetFramework>net10.0</TargetFramework>
+    <JellyfinPackageVersion>12.0.0-rc2</JellyfinPackageVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="$(JellyfinVersion.StartsWith('10.11'))">
+    <TargetFramework>net9.0</TargetFramework>
+    <JellyfinPackageVersion>10.11.0</JellyfinPackageVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="$(JellyfinVersion.StartsWith('10.10'))">
+    <TargetFramework>net8.0</TargetFramework>
+    <JellyfinPackageVersion>10.10.7</JellyfinPackageVersion>
+    <DefineConstants>$(DefineConstants);JELLYFIN_10_10</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="configPage.html" />
+    <EmbeddedResource Include="Web\badges.js" />
+    <EmbeddedResource Include="Web\badges.css" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Jellyfin.Controller" Version="$(JellyfinPackageVersion)" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.61" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3">
+      <!-- resolved from the server directory at runtime; do not ship -->
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
