@@ -17,11 +17,12 @@ async function series() {
   const r = await get(`/Items?IncludeItemTypes=Series&Recursive=true&SearchTerm=${encodeURIComponent(cfg.target.seriesName)}`);
   return r.Items[0];
 }
-async function placeholders(sid) {
-  // /Shows/{id}/Episodes hides virtual items without a user with
-  // DisplayMissingEpisodes; the generic /Items query does not.
-  const r = await get(`/Items?ParentId=${sid}&IncludeItemTypes=Episode&Recursive=true&IsVirtualItem=true&Fields=ProviderIds`);
-  return (r.Items || []).filter((e) => e.ProviderIds && e.ProviderIds.DownloadTime);
+async function placeholders(seriesName) {
+  // /Shows/{id}/Episodes hides virtual items, and ParentId+Recursive does not
+  // reach grandchild episodes on 12.0 — use the global query and filter.
+  const r = await get(`/Items?IncludeItemTypes=Episode&Recursive=true&IsVirtualItem=true&Fields=ProviderIds&Limit=5000`);
+  return (r.Items || []).filter((e) => e.ProviderIds && e.ProviderIds.DownloadTime
+    && (e.SeriesName || '').startsWith(seriesName));
 }
 async function runScanTask() {
   const res = await post('/DownloadTime/Scan?fullRefresh=true');
@@ -43,7 +44,7 @@ if (mode === 'enable') {
   await sleep(120000);
   console.log('ENABLE DONE');
 } else if (mode === 'assert-placeholder') {
-  const ph = await placeholders(s.Id);
+  const ph = await placeholders(cfg.target.seriesName);
   const hit = ph.find((e) => e.ParentIndexNumber === cfg.target.season && e.IndexNumber === cfg.target.episode);
   if (!hit) die(`no placeholder at S${cfg.target.season}E${cfg.target.episode}; found ${ph.length} total`);
   console.log('ASSERT-PLACEHOLDER PASS', hit.Name);
@@ -52,7 +53,7 @@ if (mode === 'enable') {
   // 12.0 RemoveObsoleteEpisodes fires on series refresh; force one:
   await post(`/Items/${s.Id}/Refresh?metadataRefreshMode=Default&recursive=true`);
   await sleep(60000);
-  const ph = await placeholders(s.Id);
+  const ph = await placeholders(cfg.target.seriesName);
   const still = ph.find((e) => e.ParentIndexNumber === cfg.target.season && e.IndexNumber === cfg.target.episode);
   if (still) die('placeholder survived physical restore (twin-cleanup failed)');
   console.log('TWIN-CLEANUP PASS');
