@@ -32,5 +32,9 @@
   <ItemGroup>
     <PackageReference Include="Jellyfin.Controller" Version="$(JellyfinPackageVersion)" />
     <PackageReference Include="HtmlAgilityPack" Version="1.11.61" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3">
+      <!-- resolved from the server directory at runtime; do not ship -->
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 </Project>

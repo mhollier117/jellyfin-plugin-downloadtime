@@ -1,1 +1,113 @@
-<!-- populated in Task 19 -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Download Time</title></head>
+<body>
+<div id="DownloadTimeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+  <div data-role="content"><div class="content-primary">
+    <form id="dtForm">
+      <div class="verticalSection"><h2 class="sectionTitle">Download Time</h2>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="EnableTvLane"/><span>Scan TV shows</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="EnableAnimeLane"/><span>Scan anime</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="EnableMovieLane"/><span>Scan movie franchises</span></label>
+        <div class="inputContainer"><input is="emby-input" type="text" id="TmdbApiKey" label="TMDB API key (required for tmdb-identified items and movies)"/></div>
+        <div class="inputContainer"><input is="emby-input" type="number" id="GraceHours" min="0" label="Grace period after airing, hours (0 = off)"/></div>
+        <div class="inputContainer"><input is="emby-input" type="number" id="MovieReleaseBufferDays" min="0" label="Movie release buffer, days"/></div>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="IncludeSpecials"/><span>Include specials (Season 0)</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="CreateVirtualEpisodes"/><span>Create native missing-episode placeholders (users must enable &quot;Display missing episodes&quot; in their display settings)</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ShowPosterBadges"/><span>Show poster badges</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ShowDetailBadges"/><span>Show series-page summary line</span></label>
+        <div class="inputContainer"><input is="emby-input" type="number" id="RequestDelayMs" min="0" label="Request throttle (ms, scrapers + AniDB)"/></div>
+        <div class="inputContainer"><input is="emby-input" type="text" id="ExcludedItemIds" label="Muted item ids (comma-separated)"/></div>
+        <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
+      </div>
+    </form>
+    <div class="verticalSection">
+      <h2 class="sectionTitle">Last report</h2>
+      <p>
+        <button is="emby-button" type="button" id="dtScan" class="raised"><span>Scan now</span></button>
+        <button is="emby-button" type="button" id="dtScanFull" class="raised"><span>Scan now (full refresh)</span></button>
+      </p>
+      <div id="dtReport">Loading…</div>
+    </div>
+  </div></div>
+  <script type="text/javascript">
+  (function () {
+    var pluginId = "4d557ba6-d562-4209-9a04-b782775dc2ff";
+    var fields = ["EnableTvLane","EnableAnimeLane","EnableMovieLane","IncludeSpecials","CreateVirtualEpisodes","ShowPosterBadges","ShowDetailBadges"];
+    var texts = ["TmdbApiKey","GraceHours","MovieReleaseBufferDays","RequestDelayMs"];
+
+    function loadConfig(page) {
+      ApiClient.getPluginConfiguration(pluginId).then(function (c) {
+        fields.forEach(function (f) { page.querySelector("#" + f).checked = !!c[f]; });
+        texts.forEach(function (f) { page.querySelector("#" + f).value = c[f] != null ? c[f] : ""; });
+        page.querySelector("#ExcludedItemIds").value = (c.ExcludedItemIds || []).join(",");
+      });
+    }
+
+    function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+    function fmtDate(d) { return d ? new Date(d).toLocaleDateString() : "?"; }
+
+    function renderReport(page) {
+      ApiClient.ajax({ type: "GET", url: ApiClient.getUrl("DownloadTime/Report"), dataType: "json" }).then(function (r) {
+        var html = "";
+        if (r.StartedAt && r.StartedAt !== "0001-01-01T00:00:00+00:00") {
+          html += "<p>Scan finished " + esc(new Date(r.FinishedAt).toLocaleString()) + "</p>";
+        }
+        (r.GlobalNotes || []).forEach(function (n) { html += "<p><em>" + esc(n) + "</em></p>"; });
+        var withMissing = (r.Series || []).filter(function (s) { return (s.Missing || []).length || s.Error; });
+        if (!withMissing.length && !(r.Collections || []).length) { html += "<p>No missing media. 🎉</p>"; }
+        withMissing.forEach(function (s) {
+          var gaps = s.Missing.filter(function (m) { return m.Kind === "Gap"; }).length;
+          var news = s.Missing.filter(function (m) { return m.Kind === "New"; }).length;
+          html += "<details><summary><strong>" + esc(s.Name) + "</strong> — " + gaps + " gap(s), " + news + " new"
+            + (s.UsedFallback ? " <em>(fallback source)</em>" : "") + (s.Error ? " ⚠ " + esc(s.Error) : "") + "</summary><ul>";
+          s.Missing.forEach(function (m) {
+            html += "<li>S" + (m.Season != null ? m.Season : "?") + "E" + (m.Number != null ? m.Number : "?")
+              + " " + esc(m.Title || "") + " — aired " + fmtDate(m.AiredAt) + " [" + m.Kind + "]</li>";
+          });
+          (s.Notes || []).forEach(function (n) { html += "<li><em>" + esc(n) + "</em></li>"; });
+          html += "</ul></details>";
+        });
+        (r.Collections || []).forEach(function (c) {
+          html += "<details><summary><strong>" + esc(c.Name) + "</strong> — " + c.Missing.length + " missing movie(s)</summary><ul>";
+          c.Missing.forEach(function (m) { html += "<li>" + esc(m.Title) + " (released " + fmtDate(m.ReleasedAt) + ")</li>"; });
+          html += "</ul></details>";
+        });
+        page.querySelector("#dtReport").innerHTML = html;
+      });
+    }
+
+    function scan(page, full) {
+      ApiClient.ajax({ type: "POST", url: ApiClient.getUrl("DownloadTime/Scan", { fullRefresh: full }) }).then(function () {
+        Dashboard.alert("Scan started. Refresh this page in a bit.");
+      }, function (xhr) {
+        Dashboard.alert(xhr && xhr.status === 409 ? "A scan is already running." : "Failed to start scan.");
+      });
+    }
+
+    document.querySelector("#DownloadTimeConfigPage").addEventListener("pageshow", function () {
+      var page = this;
+      loadConfig(page);
+      renderReport(page);
+      page.querySelector("#dtScan").onclick = function () { scan(page, false); };
+      page.querySelector("#dtScanFull").onclick = function () { scan(page, true); };
+      page.querySelector("#dtForm").onsubmit = function (e) {
+        e.preventDefault();
+        Dashboard.showLoadingMsg();
+        ApiClient.getPluginConfiguration(pluginId).then(function (c) {
+          fields.forEach(function (f) { c[f] = page.querySelector("#" + f).checked; });
+          c.TmdbApiKey = page.querySelector("#TmdbApiKey").value.trim();
+          c.GraceHours = parseInt(page.querySelector("#GraceHours").value, 10) || 0;
+          c.MovieReleaseBufferDays = parseInt(page.querySelector("#MovieReleaseBufferDays").value, 10) || 0;
+          c.RequestDelayMs = parseInt(page.querySelector("#RequestDelayMs").value, 10) || 0;
+          c.ExcludedItemIds = page.querySelector("#ExcludedItemIds").value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+          ApiClient.updatePluginConfiguration(pluginId, c).then(Dashboard.processPluginConfigurationUpdateResult);
+        });
+        return false;
+      };
+    });
+  })();
+  </script>
+</div>
+</body>
+</html>

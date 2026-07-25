@@ -1,1 +1,4 @@
-/* populated in Task 20 */
+.dt-badge{position:absolute;top:.35em;left:.35em;z-index:5;background:#c77400;color:#fff;
+  border-radius:1em;padding:.1em .55em;font-size:.78em;font-weight:600;pointer-events:none;
+  box-shadow:0 1px 3px rgba(0,0,0,.6)}
+.dt-detail-line{color:#c77400;font-weight:600;margin:.4em 0}
