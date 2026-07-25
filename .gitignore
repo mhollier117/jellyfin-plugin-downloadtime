@@ -4,3 +4,4 @@ release-*/
 *.user
 e2e/config.local.json
 e2e/.holding/
+release/
