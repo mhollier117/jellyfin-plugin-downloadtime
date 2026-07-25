@@ -33,5 +33,14 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
             Name = Name,
             EmbeddedResourcePath = $"{GetType().Namespace}.configPage.html"
         };
+        yield return new PluginPageInfo
+        {
+            Name = "DownloadTimeReport",
+            DisplayName = "Missing Media",
+            EmbeddedResourcePath = $"{GetType().Namespace}.reportPage.html",
+            EnableInMainMenu = true,
+            MenuSection = "server",
+            MenuIcon = "event_busy"
+        };
     }
 }

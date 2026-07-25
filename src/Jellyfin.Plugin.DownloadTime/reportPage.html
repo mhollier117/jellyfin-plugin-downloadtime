@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Missing Media</title></head>
+<body>
+<div id="DownloadTimeReportPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select">
+<style>
+#DownloadTimeReportPage { --dt-amber: #c77400; --dt-amber-soft: rgba(199,116,0,.16); --dt-steel: #6e8ca8; --dt-steel-soft: rgba(110,140,168,.16); --dt-red: #cc5c5c; --dt-surface: rgba(255,255,255,.055); --dt-surface-hover: rgba(255,255,255,.09); --dt-line: rgba(255,255,255,.10); --dt-dim: rgba(255,255,255,.55); --dt-dimmer: rgba(255,255,255,.38); }
+#DownloadTimeReportPage .dtr-wrap { max-width: 62em; margin: 0 auto; }
+
+/* header */
+#DownloadTimeReportPage .dtr-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5em 1em; margin: 0 0 .35em; }
+#DownloadTimeReportPage .dtr-head h1 { margin: 0; font-size: 1.6em; font-weight: 600; letter-spacing: .01em; }
+#DownloadTimeReportPage .dtr-fresh { color: var(--dt-dim); font-size: .92em; cursor: default; }
+#DownloadTimeReportPage .dtr-headbtns { margin-left: auto; display: flex; gap: .5em; align-items: center; }
+#DownloadTimeReportPage .dtr-headbtns button { margin: 0; }
+#DownloadTimeReportPage .dtr-gear { color: var(--dt-dim); text-decoration: none; font-size: 1.25em; line-height: 1; padding: .3em; border-radius: 4px; }
+#DownloadTimeReportPage .dtr-gear:hover { color: inherit; background: var(--dt-surface); }
+#DownloadTimeReportPage .dtr-scanstate { color: var(--dt-amber); font-size: .9em; display: none; align-items: center; gap: .45em; }
+#DownloadTimeReportPage .dtr-scanstate.on { display: inline-flex; }
+#DownloadTimeReportPage .dtr-spin { width: .85em; height: .85em; border: 2px solid var(--dt-amber-soft); border-top-color: var(--dt-amber); border-radius: 50%; animation: dtr-rot .8s linear infinite; }
+@keyframes dtr-rot { to { transform: rotate(360deg); } }
+
+/* stat tiles */
+#DownloadTimeReportPage .dtr-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6em; margin: 1em 0; }
+#DownloadTimeReportPage .dtr-tile { background: var(--dt-surface); border: 1px solid transparent; border-radius: 8px; padding: .8em .95em .7em; cursor: pointer; text-align: left; transition: background .15s, border-color .15s; font: inherit; color: inherit; }
+#DownloadTimeReportPage .dtr-tile:hover { background: var(--dt-surface-hover); }
+#DownloadTimeReportPage .dtr-tile:focus-visible { outline: 2px solid var(--dt-amber); outline-offset: 2px; }
+#DownloadTimeReportPage .dtr-tile.sel { border-color: var(--dt-amber); background: var(--dt-amber-soft); }
+#DownloadTimeReportPage .dtr-tile .n { display: block; font-size: 1.65em; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.15; }
+#DownloadTimeReportPage .dtr-tile .l { display: block; margin-top: .15em; font-size: .8em; color: var(--dt-dim); text-transform: uppercase; letter-spacing: .06em; }
+#DownloadTimeReportPage .dtr-tile.t-new .n { color: var(--dt-amber); }
+#DownloadTimeReportPage .dtr-tile.t-gap .n { color: var(--dt-steel); }
+
+/* toolbar */
+#DownloadTimeReportPage .dtr-bar { display: flex; flex-wrap: wrap; gap: .55em; align-items: center; margin: 0 0 1em; }
+#DownloadTimeReportPage .dtr-search { flex: 1 1 14em; min-width: 11em; }
+#DownloadTimeReportPage .dtr-search input { width: 100%; }
+#DownloadTimeReportPage .dtr-chips { display: flex; flex-wrap: wrap; gap: .35em; }
+#DownloadTimeReportPage .dtr-chip { font: inherit; font-size: .84em; color: var(--dt-dim); background: var(--dt-surface); border: 1px solid transparent; border-radius: 999px; padding: .3em .85em; cursor: pointer; transition: background .15s, color .15s; }
+#DownloadTimeReportPage .dtr-chip:hover { background: var(--dt-surface-hover); color: inherit; }
+#DownloadTimeReportPage .dtr-chip:focus-visible { outline: 2px solid var(--dt-amber); outline-offset: 1px; }
+#DownloadTimeReportPage .dtr-chip.sel { background: var(--dt-amber-soft); border-color: var(--dt-amber); color: inherit; }
+#DownloadTimeReportPage .dtr-sort { margin-left: auto; }
+#DownloadTimeReportPage .dtr-sort select { font-size: .9em; }
+
+/* section headers */
+#DownloadTimeReportPage .dtr-sect { margin: 1.4em 0 .5em; font-size: .85em; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--dt-dimmer); }
+#DownloadTimeReportPage .dtr-count { font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+/* cards */
+#DownloadTimeReportPage .dtr-card { background: var(--dt-surface); border-radius: 8px; margin: 0 0 .55em; overflow: hidden; }
+#DownloadTimeReportPage .dtr-row { display: flex; align-items: center; gap: .85em; padding: .6em .8em; cursor: pointer; transition: background .15s; }
+#DownloadTimeReportPage .dtr-row:hover { background: var(--dt-surface-hover); }
+#DownloadTimeReportPage .dtr-row:focus-visible { outline: 2px solid var(--dt-amber); outline-offset: -2px; }
+#DownloadTimeReportPage .dtr-poster { flex: 0 0 44px; width: 44px; height: 66px; border-radius: 5px; overflow: hidden; background: var(--dt-steel-soft); position: relative; }
+#DownloadTimeReportPage .dtr-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#DownloadTimeReportPage .dtr-mono { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.5em; font-weight: 650; color: var(--dt-steel); }
+#DownloadTimeReportPage .dtr-main { flex: 1 1 auto; min-width: 0; }
+#DownloadTimeReportPage .dtr-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#DownloadTimeReportPage .dtr-meta { display: flex; flex-wrap: wrap; gap: .35em; margin-top: .3em; align-items: center; }
+#DownloadTimeReportPage .dtr-pill { font-size: .72em; padding: .12em .55em; border-radius: 999px; background: rgba(255,255,255,.09); color: var(--dt-dim); letter-spacing: .04em; }
+#DownloadTimeReportPage .dtr-pill.warn { background: rgba(204,92,92,.16); color: var(--dt-red); }
+#DownloadTimeReportPage .dtr-chipG { font-size: .78em; padding: .14em .6em; border-radius: 999px; background: var(--dt-steel-soft); color: var(--dt-steel); font-variant-numeric: tabular-nums; }
+#DownloadTimeReportPage .dtr-chipN { font-size: .78em; padding: .14em .6em; border-radius: 999px; background: var(--dt-amber-soft); color: var(--dt-amber); font-variant-numeric: tabular-nums; }
+#DownloadTimeReportPage .dtr-ctl { display: flex; align-items: center; gap: .15em; flex: 0 0 auto; }
+#DownloadTimeReportPage .dtr-ibtn { font: inherit; background: none; border: none; color: var(--dt-dimmer); cursor: pointer; padding: .35em .45em; border-radius: 5px; font-size: 1.05em; line-height: 1; }
+#DownloadTimeReportPage .dtr-ibtn:hover { color: inherit; background: rgba(255,255,255,.08); }
+#DownloadTimeReportPage .dtr-ibtn:focus-visible { outline: 2px solid var(--dt-amber); }
+#DownloadTimeReportPage .dtr-chev { transition: transform .16s ease; display: inline-block; }
+#DownloadTimeReportPage .dtr-card.open .dtr-chev { transform: rotate(90deg); }
+
+/* episode detail */
+#DownloadTimeReportPage .dtr-detail { display: none; border-top: 1px solid var(--dt-line); padding: .35em .8em .7em; }
+#DownloadTimeReportPage .dtr-card.open .dtr-detail { display: block; }
+#DownloadTimeReportPage .dtr-season { margin: .65em 0 .2em; font-size: .78em; font-weight: 600; color: var(--dt-dimmer); letter-spacing: .06em; text-transform: uppercase; }
+#DownloadTimeReportPage .dtr-ep { display: flex; align-items: baseline; gap: .6em; padding: .22em 0; font-size: .92em; }
+#DownloadTimeReportPage .dtr-code { font-family: ui-monospace, Consolas, monospace; font-size: .85em; color: var(--dt-dim); flex: 0 0 4.6em; }
+#DownloadTimeReportPage .dtr-eptitle { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#DownloadTimeReportPage .dtr-epdate { color: var(--dt-dimmer); font-size: .85em; flex: 0 0 auto; }
+#DownloadTimeReportPage .dtr-k { font-size: .7em; padding: .1em .5em; border-radius: 999px; flex: 0 0 auto; }
+#DownloadTimeReportPage .dtr-k.g { background: var(--dt-steel-soft); color: var(--dt-steel); }
+#DownloadTimeReportPage .dtr-k.n { background: var(--dt-amber-soft); color: var(--dt-amber); }
+#DownloadTimeReportPage .dtr-more { margin: .5em 0 0; font-size: .85em; color: var(--dt-amber); background: none; border: 1px solid var(--dt-amber-soft); border-radius: 5px; padding: .35em .9em; cursor: pointer; }
+#DownloadTimeReportPage .dtr-more:hover { background: var(--dt-amber-soft); }
+#DownloadTimeReportPage .dtr-note { color: var(--dt-dimmer); font-size: .85em; margin-top: .5em; font-style: italic; }
+
+/* movies */
+#DownloadTimeReportPage .dtr-via { color: var(--dt-dimmer); font-size: .82em; }
+#DownloadTimeReportPage .dtr-mvrow { display: flex; gap: .6em; align-items: baseline; padding: .22em 0; font-size: .92em; }
+
+/* errors + muted */
+#DownloadTimeReportPage details.dtr-fold { margin: 1.2em 0; }
+#DownloadTimeReportPage details.dtr-fold summary { cursor: pointer; color: var(--dt-dim); font-size: .92em; padding: .4em 0; list-style-position: outside; }
+#DownloadTimeReportPage details.dtr-fold summary:hover { color: inherit; }
+#DownloadTimeReportPage .dtr-errrow { display: flex; gap: .7em; align-items: baseline; padding: .3em 0; font-size: .9em; }
+#DownloadTimeReportPage .dtr-errname { flex: 0 0 auto; font-weight: 600; }
+#DownloadTimeReportPage .dtr-errmsg { color: var(--dt-red); min-width: 0; overflow-wrap: anywhere; }
+
+/* empty state */
+#DownloadTimeReportPage .dtr-hero { text-align: center; padding: 4em 1em 5em; }
+#DownloadTimeReportPage .dtr-hero .big { font-size: 2.6em; }
+#DownloadTimeReportPage .dtr-hero h2 { margin: .4em 0 .2em; font-weight: 600; }
+#DownloadTimeReportPage .dtr-hero p { color: var(--dt-dim); margin: 0; }
+
+@media (max-width: 42em) {
+  #DownloadTimeReportPage .dtr-tiles { grid-template-columns: repeat(2, 1fr); }
+  #DownloadTimeReportPage .dtr-sort { margin-left: 0; }
+  #DownloadTimeReportPage .dtr-epdate { display: none; }
+}
+</style>
+<div data-role="content"><div class="content-primary dtr-wrap">
+
+  <div class="dtr-head">
+    <h1>Missing Media</h1>
+    <span class="dtr-fresh" id="dtrFresh"></span>
+    <span class="dtr-scanstate" id="dtrScanState"><span class="dtr-spin"></span>Scanning&#8230;</span>
+    <div class="dtr-headbtns">
+      <button is="emby-button" type="button" class="raised" id="dtrScan"><span>Scan now</span></button>
+      <button is="emby-button" type="button" class="raised" id="dtrScanFull" title="Ignore cached source data"><span>Full refresh</span></button>
+      <a class="dtr-gear" href="#/configurationpage?name=Download%20Time" title="Download Time settings">&#9881;</a>
+    </div>
+  </div>
+
+  <div class="dtr-tiles" id="dtrTiles"></div>
+
+  <div class="dtr-bar">
+    <div class="inputContainer dtr-search" style="margin:0">
+      <input is="emby-input" type="search" id="dtrSearch" placeholder="Search shows and movies&#8230;" autocomplete="off" />
+    </div>
+    <div class="dtr-chips" id="dtrChips"></div>
+    <div class="selectContainer dtr-sort" style="margin:0">
+      <select is="emby-select" id="dtrSort" aria-label="Sort">
+        <option value="most">Most missing</option>
+        <option value="recent">Recently aired</option>
+        <option value="az">A&#8211;Z</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="dtrBody"></div>
+
+</div></div>
+
+<script type="text/javascript">
+(function () {
+    'use strict';
+    var GUID = '4d557ba6-d562-4209-9a04-b782775dc2ff';
+    var page = document.querySelector('#DownloadTimeReportPage');
+    var state = { report: null, filter: 'all', search: '', sort: 'most', muteOverride: {}, scanning: false, pollTimer: null };
+
+    /* ---------- utils ---------- */
+    function esc(s) { var d = document.createElement('div'); d.textContent = (s == null ? '' : String(s)); return d.innerHTML; }
+    function idN(id) { return String(id || '').replace(/-/g, '').toLowerCase(); }
+    function num(n) { return (n || 0).toLocaleString(); }
+    function fmtDate(d) {
+        if (!d) return '';
+        try { return new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return ''; }
+    }
+    function relTime(d) {
+        var ms = Date.now() - new Date(d).getTime();
+        if (!(ms >= 0)) return '';
+        var m = Math.floor(ms / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return m + 'm ago';
+        var h = Math.floor(m / 60);
+        if (h < 24) return h + 'h ago';
+        return Math.floor(h / 24) + 'd ago';
+    }
+    function hasScan(r) { return r && r.StartedAt && r.StartedAt.indexOf('0001-') !== 0; }
+    function isMuted(s) {
+        var o = state.muteOverride[idN(s.ItemId)];
+        return o === undefined ? !!s.Muted : o;
+    }
+    function counts(s) {
+        var g = 0, n = 0;
+        (s.Missing || []).forEach(function (m) { if (m.Kind === 'New') { n++; } else { g++; } });
+        return { g: g, n: n, t: g + n };
+    }
+    function newestAir(s) {
+        var best = 0;
+        (s.Missing || []).forEach(function (m) { if (m.AiredAt) { var t = new Date(m.AiredAt).getTime(); if (t > best) best = t; } });
+        return best;
+    }
+
+    /* ---------- data ---------- */
+    function loadReport() {
+        return ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('DownloadTime/Report'), dataType: 'json' })
+            .then(function (r) { state.report = r; });
+    }
+
+    /* ---------- header / tiles / chips ---------- */
+    function renderFresh() {
+        var el = page.querySelector('#dtrFresh');
+        var r = state.report;
+        if (!hasScan(r)) { el.textContent = 'No scan yet'; el.title = ''; return; }
+        el.textContent = 'Scanned ' + relTime(r.FinishedAt);
+        el.title = new Date(r.FinishedAt).toLocaleString();
+    }
+
+    function totals() {
+        var t = { shows: 0, gaps: 0, news: 0, movies: 0 };
+        var r = state.report || {};
+        (r.Series || []).forEach(function (s) {
+            if (isMuted(s)) return;
+            var c = counts(s);
+            if (c.t > 0) t.shows++;
+            t.gaps += c.g; t.news += c.n;
+        });
+        (r.Collections || []).forEach(function (c) { t.movies += (c.Missing || []).length; });
+        return t;
+    }
+
+    function renderTiles() {
+        var t = totals();
+        var defs = [
+            { k: 'all', cls: '', n: t.shows, l: 'Shows with missing' },
+            { k: 'gaps', cls: 't-gap', n: t.gaps, l: 'Gaps' },
+            { k: 'new', cls: 't-new', n: t.news, l: 'New episodes' },
+            { k: 'movies', cls: '', n: t.movies, l: 'Missing movies' }
+        ];
+        page.querySelector('#dtrTiles').innerHTML = defs.map(function (d) {
+            return '<button type="button" class="dtr-tile ' + d.cls + (state.filter === d.k ? ' sel' : '') + '" data-filter="' + d.k + '">'
+                + '<span class="n">' + num(d.n) + '</span><span class="l">' + d.l + '</span></button>';
+        }).join('');
+    }
+
+    function renderChips() {
+        var defs = [
+            { k: 'all', l: 'All' }, { k: 'gaps', l: 'Gaps only' }, { k: 'new', l: 'New only' },
+            { k: 'movies', l: 'Movies' }, { k: 'errors', l: 'Errors' }, { k: 'muted', l: 'Muted' }
+        ];
+        page.querySelector('#dtrChips').innerHTML = defs.map(function (d) {
+            return '<button type="button" class="dtr-chip' + (state.filter === d.k ? ' sel' : '') + '" data-filter="' + d.k + '">' + d.l + '</button>';
+        }).join('');
+    }
+
+    /* ---------- series ---------- */
+    var EP_PREVIEW = 50;
+
+    function epRow(m) {
+        var code = 'S' + String(m.Season == null ? '?' : m.Season).padStart(2, '0') + 'E' + String(m.Number == null ? '?' : m.Number).padStart(2, '0');
+        return '<div class="dtr-ep"><span class="dtr-code">' + esc(code) + '</span>'
+            + '<span class="dtr-eptitle">' + esc(m.Title || '') + '</span>'
+            + (m.AiredAt ? '<span class="dtr-epdate">aired ' + esc(fmtDate(m.AiredAt)) + '</span>' : '')
+            + '<span class="dtr-k ' + (m.Kind === 'New' ? 'n' : 'g') + '">' + (m.Kind === 'New' ? 'New' : 'Gap') + '</span></div>';
+    }
+
+    function epList(list) {
+        var html = '';
+        var bySeason = {};
+        var order = [];
+        list.forEach(function (m) {
+            var k = (m.Season == null ? '?' : m.Season);
+            if (!bySeason[k]) { bySeason[k] = []; order.push(k); }
+            bySeason[k].push(m);
+        });
+        order.forEach(function (k) {
+            html += '<div class="dtr-season">' + (k === '?' ? 'Unknown season' : (k === 0 || k === '0' ? 'Specials' : 'Season ' + k)) + '</div>';
+            html += bySeason[k].map(epRow).join('');
+        });
+        return html;
+    }
+
+    function filteredEps(s) {
+        var eps = s.Missing || [];
+        if (state.filter === 'gaps') eps = eps.filter(function (m) { return m.Kind !== 'New'; });
+        if (state.filter === 'new') eps = eps.filter(function (m) { return m.Kind === 'New'; });
+        return eps;
+    }
+
+    function seriesCard(s) {
+        var c = counts(s);
+        var muted = isMuted(s);
+        var eps = filteredEps(s);
+        var nId = idN(s.ItemId);
+        var poster = '<div class="dtr-poster"><img loading="lazy" src="' + ApiClient.getScaledImageUrl(s.ItemId, { type: 'Primary', maxHeight: 300 }) + '" alt="" />'
+            + '<div class="dtr-mono" style="display:none">' + esc((s.Name || '?').charAt(0).toUpperCase()) + '</div></div>';
+        var pills = '<span class="dtr-pill">' + esc(s.Lane || '?') + (s.UsedFallback ? ' &#183; fallback' : '') + '</span>'
+            + (s.Error ? '<span class="dtr-pill warn">error</span>' : '');
+        var chips = (c.g ? '<span class="dtr-chipG">' + num(c.g) + ' gap' + (c.g === 1 ? '' : 's') + '</span>' : '')
+            + (c.n ? '<span class="dtr-chipN">' + num(c.n) + ' new</span>' : '');
+        var preview = eps.slice(0, EP_PREVIEW);
+        var detail = epList(preview)
+            + (eps.length > EP_PREVIEW ? '<button type="button" class="dtr-more" data-act="showall" data-id="' + nId + '">Show all ' + num(eps.length) + ' episodes</button>' : '')
+            + (s.Notes || []).map(function (n) { return '<div class="dtr-note">' + esc(n) + '</div>'; }).join('')
+            + (muted && c.t === 0 ? '<div class="dtr-note">Muted &#8212; counts appear after the next scan once unmuted.</div>' : '');
+        return '<div class="dtr-card" data-id="' + nId + '">'
+            + '<div class="dtr-row" tabindex="0" role="button" data-act="toggle" data-id="' + nId + '">'
+            + poster
+            + '<div class="dtr-main"><div class="dtr-name">' + esc(s.Name) + '</div><div class="dtr-meta">' + pills + chips + '</div></div>'
+            + '<div class="dtr-ctl">'
+            + '<button type="button" class="dtr-ibtn" data-act="' + (muted ? 'unmute' : 'mute') + '" data-id="' + nId + '" title="' + (muted ? 'Unmute' : 'Mute') + ' ' + esc(s.Name) + '">' + (muted ? '&#128266;' : '&#128263;') + '</button>'
+            + '<span class="dtr-ibtn dtr-chev">&#8250;</span>'
+            + '</div></div>'
+            + '<div class="dtr-detail">' + detail + '</div></div>';
+    }
+
+    function collectionCard(c) {
+        var rows = (c.Missing || []).map(function (m) {
+            return '<div class="dtr-mvrow"><span class="dtr-eptitle">' + esc(m.Title) + '</span>'
+                + (m.ReleasedAt ? '<span class="dtr-epdate">released ' + esc(fmtDate(m.ReleasedAt)) + '</span>' : '<span class="dtr-epdate">unreleased</span>')
+                + '</div>';
+        }).join('');
+        return '<div class="dtr-card open"><div class="dtr-row" style="cursor:default">'
+            + '<div class="dtr-main"><div class="dtr-name">' + esc(c.Name) + '</div>'
+            + '<div class="dtr-meta"><span class="dtr-via">via ' + esc(c.ViaMovie) + '</span>'
+            + '<span class="dtr-chipN">' + num((c.Missing || []).length) + ' missing</span></div></div>'
+            + '</div><div class="dtr-detail" style="display:block">' + rows + '</div></div>';
+    }
+
+    /* ---------- body ---------- */
+    function matchesSearch(name) {
+        return !state.search || (name || '').toLowerCase().indexOf(state.search) !== -1;
+    }
+
+    function sortSeries(list) {
+        var s = state.sort;
+        return list.sort(function (a, b) {
+            if (s === 'az') return (a.Name || '').localeCompare(b.Name || '');
+            if (s === 'recent') return newestAir(b) - newestAir(a);
+            return counts(b).t - counts(a).t;
+        });
+    }
+
+    function renderBody() {
+        var r = state.report || {};
+        var body = page.querySelector('#dtrBody');
+        if (!hasScan(r)) {
+            body.innerHTML = '<div class="dtr-hero"><div class="big">&#128269;</div><h2>No scan yet</h2><p>Run your first scan to find missing episodes and movies.</p></div>';
+            return;
+        }
+        var f = state.filter;
+        var all = r.Series || [];
+        var active = all.filter(function (s) { return !isMuted(s); });
+        var mutedList = all.filter(isMuted);
+        var errored = active.filter(function (s) { return s.Error; });
+        var html = '';
+
+        if (f !== 'muted' && f !== 'errors' && f !== 'movies') {
+            var shows = active.filter(function (s) {
+                var c = counts(s);
+                if (!matchesSearch(s.Name)) return false;
+                if (f === 'gaps') return c.g > 0;
+                if (f === 'new') return c.n > 0;
+                return c.t > 0;
+            });
+            sortSeries(shows);
+            if (shows.length) {
+                html += '<div class="dtr-sect">Shows <span class="dtr-count">&#183; ' + num(shows.length) + '</span></div>';
+                html += shows.map(seriesCard).join('');
+            }
+        }
+
+        if (f === 'all' || f === 'movies') {
+            var cols = (r.Collections || []).filter(function (c) {
+                return matchesSearch(c.Name) || (c.Missing || []).some(function (m) { return matchesSearch(m.Title); });
+            });
+            if (cols.length) {
+                html += '<div class="dtr-sect">Movie collections <span class="dtr-count">&#183; ' + num(cols.length) + '</span></div>';
+                html += cols.map(collectionCard).join('');
+            }
+        }
+
+        if (f === 'errors') {
+            html += '<div class="dtr-sect">Errors <span class="dtr-count">&#183; ' + num(errored.length) + '</span></div>';
+            html += errored.length
+                ? errored.map(function (s) { return '<div class="dtr-errrow"><span class="dtr-errname">' + esc(s.Name) + '</span><span class="dtr-errmsg">' + esc(s.Error) + '</span></div>'; }).join('')
+                : '<div class="dtr-note">No source errors. &#127881;</div>';
+            (r.GlobalNotes || []).forEach(function (n) { html += '<div class="dtr-errrow"><span class="dtr-errmsg">' + esc(n) + '</span></div>'; });
+        }
+
+        if (f === 'muted') {
+            html += '<div class="dtr-sect">Muted <span class="dtr-count">&#183; ' + num(mutedList.length) + '</span></div>';
+            html += mutedList.length ? mutedList.filter(function (s) { return matchesSearch(s.Name); }).map(seriesCard).join('')
+                : '<div class="dtr-note">Nothing muted.</div>';
+        }
+
+        if (f === 'all' && !html) {
+            html = '<div class="dtr-hero"><div class="big">&#127881;</div><h2>All caught up</h2><p>No missing episodes or movies anywhere in the library.</p></div>';
+        }
+
+        // quiet links to secondary groups when browsing "all"
+        if (f === 'all' && (errored.length || mutedList.length || (r.GlobalNotes || []).length)) {
+            html += '<details class="dtr-fold"><summary>' + num(errored.length) + ' source error(s) &#183; ' + num(mutedList.length) + ' muted show(s)</summary>';
+            html += errored.map(function (s) { return '<div class="dtr-errrow"><span class="dtr-errname">' + esc(s.Name) + '</span><span class="dtr-errmsg">' + esc(s.Error) + '</span></div>'; }).join('');
+            (r.GlobalNotes || []).forEach(function (n) { html += '<div class="dtr-errrow"><span class="dtr-errmsg">' + esc(n) + '</span></div>'; });
+            html += mutedList.map(seriesCard).join('');
+            html += '</details>';
+        }
+
+        body.innerHTML = html;
+    }
+
+    function renderAll() {
+        renderFresh();
+        renderTiles();
+        renderChips();
+        renderBody();
+    }
+
+    /* ---------- mute ---------- */
+    function setMuted(nId, muted) {
+        state.muteOverride[nId] = muted;
+        renderAll();
+        ApiClient.getPluginConfiguration(GUID).then(function (c) {
+            var list = (c.ExcludedItemIds || []).filter(function (x) { return idN(x) !== nId; });
+            if (muted) list.push(nId);
+            c.ExcludedItemIds = list;
+            return ApiClient.updatePluginConfiguration(GUID, c);
+        }).catch(function () {
+            delete state.muteOverride[nId];
+            renderAll();
+            Dashboard.alert('Failed to update mute list.');
+        });
+    }
+
+    /* ---------- scanning ---------- */
+    function setScanning(on) {
+        state.scanning = on;
+        page.querySelector('#dtrScanState').classList.toggle('on', on);
+        ['#dtrScan', '#dtrScanFull'].forEach(function (sel) { page.querySelector(sel).disabled = on; });
+    }
+
+    function pollUntilDone(prevFinished) {
+        clearTimeout(state.pollTimer);
+        state.pollTimer = setTimeout(function () {
+            loadReport().then(function () {
+                if (state.report && state.report.FinishedAt !== prevFinished) {
+                    state.muteOverride = {};
+                    setScanning(false);
+                    renderAll();
+                } else {
+                    pollUntilDone(prevFinished);
+                }
+            }).catch(function () { pollUntilDone(prevFinished); });
+        }, 10000);
+    }
+
+    function startScan(full) {
+        if (state.scanning) return;
+        var prev = state.report ? state.report.FinishedAt : null;
+        setScanning(true);
+        ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('DownloadTime/Scan', { fullRefresh: !!full }) })
+            .then(function () { pollUntilDone(prev); })
+            .catch(function (xhr) {
+                if (xhr && xhr.status === 409) { pollUntilDone(prev); }
+                else { setScanning(false); Dashboard.alert('Failed to start scan.'); }
+            });
+    }
+
+    /* ---------- events ---------- */
+    page.addEventListener('click', function (e) {
+        var t = e.target.closest ? e.target.closest('[data-act],[data-filter]') : null;
+        if (!t || !page.contains(t)) return;
+        var filter = t.getAttribute('data-filter');
+        if (filter) {
+            state.filter = (state.filter === filter && filter !== 'all') ? 'all' : filter;
+            renderAll();
+            return;
+        }
+        var act = t.getAttribute('data-act');
+        var nId = t.getAttribute('data-id');
+        if (act === 'mute' || act === 'unmute') {
+            e.stopPropagation();
+            setMuted(nId, act === 'mute');
+        } else if (act === 'showall') {
+            e.stopPropagation();
+            var series = (state.report.Series || []).find(function (s) { return idN(s.ItemId) === nId; });
+            if (series) {
+                t.parentElement.innerHTML = epList(filteredEps(series))
+                    + (series.Notes || []).map(function (n) { return '<div class="dtr-note">' + esc(n) + '</div>'; }).join('');
+            }
+        } else if (act === 'toggle') {
+            var card = t.closest('.dtr-card');
+            if (card) card.classList.toggle('open');
+        }
+    });
+
+    page.addEventListener('keydown', function (e) {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.getAttribute && e.target.getAttribute('data-act') === 'toggle') {
+            e.preventDefault();
+            e.target.closest('.dtr-card').classList.toggle('open');
+        }
+    });
+
+    // poster fallback (error doesn't bubble; use capture)
+    page.addEventListener('error', function (e) {
+        var img = e.target;
+        if (img.tagName === 'IMG' && img.closest('.dtr-poster')) {
+            img.style.display = 'none';
+            var mono = img.parentElement.querySelector('.dtr-mono');
+            if (mono) mono.style.display = 'flex';
+        }
+    }, true);
+
+    page.addEventListener('pageshow', function () {
+        page.querySelector('#dtrScan').onclick = function () { startScan(false); };
+        page.querySelector('#dtrScanFull').onclick = function () { startScan(true); };
+        page.querySelector('#dtrSearch').oninput = function () { state.search = this.value.trim().toLowerCase(); renderBody(); };
+        page.querySelector('#dtrSort').onchange = function () { state.sort = this.value; renderBody(); };
+        loadReport().then(renderAll).catch(function () {
+            page.querySelector('#dtrBody').innerHTML = '<div class="dtr-note">Failed to load report.</div>';
+        });
+    });
+})();
+</script>
+</div>
+</body>
+</html>

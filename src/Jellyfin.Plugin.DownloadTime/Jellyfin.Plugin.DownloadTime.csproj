@@ -26,6 +26,7 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="configPage.html" />
+    <EmbeddedResource Include="reportPage.html" />
     <EmbeddedResource Include="Web\badges.js" />
     <EmbeddedResource Include="Web\badges.css" />
   </ItemGroup>

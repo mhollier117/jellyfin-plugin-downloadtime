@@ -22,12 +22,10 @@
       </div>
     </form>
     <div class="verticalSection">
-      <h2 class="sectionTitle">Last report</h2>
-      <p>
-        <button is="emby-button" type="button" id="dtScan" class="raised"><span>Scan now</span></button>
-        <button is="emby-button" type="button" id="dtScanFull" class="raised"><span>Scan now (full refresh)</span></button>
-      </p>
-      <div id="dtReport">Loading…</div>
+      <a is="emby-linkbutton" class="raised button-submit block" style="text-align:center" href="#/configurationpage?name=DownloadTimeReport">
+        <span>Open Missing Media report</span>
+      </a>
+      <p style="opacity:.65">The report also lives in the dashboard sidebar under <em>Missing Media</em>.</p>
     </div>
   </div></div>
   <script type="text/javascript">
@@ -44,53 +42,9 @@
       });
     }
 
-    function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
-    function fmtDate(d) { return d ? new Date(d).toLocaleDateString() : "?"; }
-
-    function renderReport(page) {
-      ApiClient.ajax({ type: "GET", url: ApiClient.getUrl("DownloadTime/Report"), dataType: "json" }).then(function (r) {
-        var html = "";
-        if (r.StartedAt && r.StartedAt !== "0001-01-01T00:00:00+00:00") {
-          html += "<p>Scan finished " + esc(new Date(r.FinishedAt).toLocaleString()) + "</p>";
-        }
-        (r.GlobalNotes || []).forEach(function (n) { html += "<p><em>" + esc(n) + "</em></p>"; });
-        var withMissing = (r.Series || []).filter(function (s) { return (s.Missing || []).length || s.Error; });
-        if (!withMissing.length && !(r.Collections || []).length) { html += "<p>No missing media. 🎉</p>"; }
-        withMissing.forEach(function (s) {
-          var gaps = s.Missing.filter(function (m) { return m.Kind === "Gap"; }).length;
-          var news = s.Missing.filter(function (m) { return m.Kind === "New"; }).length;
-          html += "<details><summary><strong>" + esc(s.Name) + "</strong> — " + gaps + " gap(s), " + news + " new"
-            + (s.UsedFallback ? " <em>(fallback source)</em>" : "") + (s.Error ? " ⚠ " + esc(s.Error) : "") + "</summary><ul>";
-          s.Missing.forEach(function (m) {
-            html += "<li>S" + (m.Season != null ? m.Season : "?") + "E" + (m.Number != null ? m.Number : "?")
-              + " " + esc(m.Title || "") + " — aired " + fmtDate(m.AiredAt) + " [" + m.Kind + "]</li>";
-          });
-          (s.Notes || []).forEach(function (n) { html += "<li><em>" + esc(n) + "</em></li>"; });
-          html += "</ul></details>";
-        });
-        (r.Collections || []).forEach(function (c) {
-          html += "<details><summary><strong>" + esc(c.Name) + "</strong> — " + c.Missing.length + " missing movie(s)</summary><ul>";
-          c.Missing.forEach(function (m) { html += "<li>" + esc(m.Title) + " (released " + fmtDate(m.ReleasedAt) + ")</li>"; });
-          html += "</ul></details>";
-        });
-        page.querySelector("#dtReport").innerHTML = html;
-      });
-    }
-
-    function scan(page, full) {
-      ApiClient.ajax({ type: "POST", url: ApiClient.getUrl("DownloadTime/Scan", { fullRefresh: full }) }).then(function () {
-        Dashboard.alert("Scan started. Refresh this page in a bit.");
-      }, function (xhr) {
-        Dashboard.alert(xhr && xhr.status === 409 ? "A scan is already running." : "Failed to start scan.");
-      });
-    }
-
     document.querySelector("#DownloadTimeConfigPage").addEventListener("pageshow", function () {
       var page = this;
       loadConfig(page);
-      renderReport(page);
-      page.querySelector("#dtScan").onclick = function () { scan(page, false); };
-      page.querySelector("#dtScanFull").onclick = function () { scan(page, true); };
       page.querySelector("#dtForm").onsubmit = function (e) {
         e.preventDefault();
         Dashboard.showLoadingMsg();
