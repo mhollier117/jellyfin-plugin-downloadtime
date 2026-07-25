@@ -40,6 +40,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             () => Config().TmdbApiKey,
             ts => Task.Delay(ts)));
         services.AddSingleton<ILibraryReader, JellyfinLibraryReader>();
+        services.AddSingleton<VirtualEpisodeWriter>();
         services.AddSingleton<ScanService>();
         services.AddSingleton(sp => new ScanRunner(
             sp.GetRequiredService<ScanService>(),
