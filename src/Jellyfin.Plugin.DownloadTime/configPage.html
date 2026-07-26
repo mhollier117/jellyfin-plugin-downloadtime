@@ -10,6 +10,11 @@
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="EnableAnimeLane"/><span>Scan anime</span></label>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="EnableMovieLane"/><span>Scan movie franchises</span></label>
         <div class="inputContainer"><input is="emby-input" type="text" id="TmdbApiKey" label="TMDB API key (required for tmdb-identified items and movies)"/></div>
+        <div class="inputContainer">
+          <input is="emby-input" type="text" id="AniDbClientName" label="AniDB client name (required for anime)"/>
+          <div class="fieldDescription">Register your own free HTTP client at <b>anidb.net/software/add</b> (add software, then add an HTTP client to it) and enter its client string here. Client strings are tied to the registering AniDB account &mdash; do not use someone else's.</div>
+        </div>
+        <div class="inputContainer"><input is="emby-input" type="number" id="AniDbClientVersion" min="1" label="AniDB client version (as registered)"/></div>
         <div class="inputContainer"><input is="emby-input" type="number" id="GraceHours" min="0" label="Grace period after airing, hours (0 = off)"/></div>
         <div class="inputContainer"><input is="emby-input" type="number" id="MovieReleaseBufferDays" min="0" label="Movie release buffer, days"/></div>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="IncludeSpecials"/><span>Include specials (Season 0)</span></label>
@@ -32,7 +37,7 @@
   (function () {
     var pluginId = "4d557ba6-d562-4209-9a04-b782775dc2ff";
     var fields = ["EnableTvLane","EnableAnimeLane","EnableMovieLane","IncludeSpecials","CreateVirtualEpisodes","ShowPosterBadges","ShowDetailBadges"];
-    var texts = ["TmdbApiKey","GraceHours","MovieReleaseBufferDays","RequestDelayMs"];
+    var texts = ["TmdbApiKey","AniDbClientName","AniDbClientVersion","GraceHours","MovieReleaseBufferDays","RequestDelayMs"];
 
     function loadConfig(page) {
       ApiClient.getPluginConfiguration(pluginId).then(function (c) {
@@ -51,6 +56,8 @@
         ApiClient.getPluginConfiguration(pluginId).then(function (c) {
           fields.forEach(function (f) { c[f] = page.querySelector("#" + f).checked; });
           c.TmdbApiKey = page.querySelector("#TmdbApiKey").value.trim();
+          c.AniDbClientName = page.querySelector("#AniDbClientName").value.trim();
+          c.AniDbClientVersion = parseInt(page.querySelector("#AniDbClientVersion").value, 10) || 1;
           c.GraceHours = parseInt(page.querySelector("#GraceHours").value, 10) || 0;
           c.MovieReleaseBufferDays = parseInt(page.querySelector("#MovieReleaseBufferDays").value, 10) || 0;
           c.RequestDelayMs = parseInt(page.querySelector("#RequestDelayMs").value, 10) || 0;

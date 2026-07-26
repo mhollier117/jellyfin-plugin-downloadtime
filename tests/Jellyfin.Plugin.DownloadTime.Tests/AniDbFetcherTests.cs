@@ -18,10 +18,24 @@ public class AniDbFetcherTests
     private static readonly DateTimeOffset Now = new(2026, 7, 25, 12, 0, 0, TimeSpan.Zero);
     private static string Fix(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "fixtures", name));
 
-    private static AniDbFetcher Make(FakeHttpHandler handler, FakeClock clock, List<TimeSpan>? delays = null, int delayMs = 2000)
+    private static AniDbFetcher Make(FakeHttpHandler handler, FakeClock clock, List<TimeSpan>? delays = null, int delayMs = 2000, string clientName = "exampleclient")
         => new(new HttpClient(handler), clock,
             async ts => { delays?.Add(ts); clock.UtcNow += ts; await Task.CompletedTask; },
-            () => delayMs, () => ("downloadtime", 1));
+            () => delayMs, () => (clientName, 1));
+
+    [Fact]
+    public async Task BlankClientName_FailsFast_NoHttp()
+    {
+        // Per-user AniDB registration: client strings are tied to the OWNER's
+        // AniDB account, so the plugin must never ship a shared default.
+        // Blank name -> clear config error, zero network calls.
+        var handler = new FakeHttpHandler(_ => FakeHttpHandler.Xml("<anime id=\"1\"/>"));
+        var f = Make(handler, new FakeClock(Now), clientName: "");
+        var outcome = await f.FetchByAnimeIdAsync("18164", CancellationToken.None);
+        Assert.Null(outcome.Catalog);
+        Assert.Contains("client", outcome.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(handler.Requests);
+    }
 
     [Fact]
     public void ParseAnime_Golden()
@@ -64,7 +78,7 @@ public class AniDbFetcherTests
         Assert.NotNull(outcome.Catalog);
         var q = handler.Requests[0].Query;
         Assert.Contains("request=anime", q);
-        Assert.Contains("client=downloadtime", q);
+        Assert.Contains("client=exampleclient", q);
         Assert.Contains("clientver=1", q);
         Assert.Contains("protover=1", q);
         Assert.Contains("aid=18164", q);

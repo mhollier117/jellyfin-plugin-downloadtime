@@ -31,6 +31,13 @@ public class AniDbFetcher : IAniDbSource
 
     public async Task<FetchOutcome> FetchByAnimeIdAsync(string anidbId, CancellationToken ct)
     {
+        // Client strings are registered under a specific AniDB account; each
+        // installer must supply their OWN (Settings -> AniDB client name).
+        if (string.IsNullOrWhiteSpace(_clientId().Name))
+        {
+            return FetchOutcome.Fail("AniDB client not configured — register your own HTTP client at anidb.net/software/add and enter its name in Download Time settings.");
+        }
+
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {

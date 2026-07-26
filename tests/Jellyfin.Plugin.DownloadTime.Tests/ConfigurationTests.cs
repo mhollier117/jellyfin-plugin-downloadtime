@@ -23,7 +23,9 @@ public class ConfigurationTests
         Assert.True(c.ShowDetailBadges);
         Assert.Empty(c.ExcludedItemIds);
         Assert.Equal(2000, c.RequestDelayMs);
-        Assert.Equal("downloadtime", c.AniDbClientName);
+        // Deliberately blank: AniDB client strings are per-account registrations;
+        // shipping a shared default would funnel all installs through one account.
+        Assert.Equal(string.Empty, c.AniDbClientName);
         Assert.Equal(1, c.AniDbClientVersion);
         Assert.Equal(1, c.ContinuingTtlDays);
         Assert.Equal(7, c.EndedTtlDays);

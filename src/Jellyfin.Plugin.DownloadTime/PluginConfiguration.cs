@@ -33,7 +33,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>Min delay between outbound requests to scraped/rate-limited sources.</summary>
     public int RequestDelayMs { get; set; } = 2000;
 
-    public string AniDbClientName { get; set; } = "downloadtime";
+    /// <summary>
+    /// AniDB HTTP client name. Blank by default: client strings are registered
+    /// under a specific AniDB account, so each installer must register and enter
+    /// their own (anidb.net/software/add). The anime lane is inert when blank.
+    /// </summary>
+    public string AniDbClientName { get; set; } = string.Empty;
 
     public int AniDbClientVersion { get; set; } = 1;
 
