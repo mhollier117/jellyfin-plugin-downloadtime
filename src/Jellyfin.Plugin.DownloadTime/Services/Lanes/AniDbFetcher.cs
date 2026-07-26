@@ -161,8 +161,17 @@ public class AniDbFetcher : IAniDbSource
             {
                 continue;
             }
+            // AniDB epno types: 1=regular, 2=special, 3=credits (OP/ED),
+            // 4=trailer, 5=parody, 6=other. Only 1 and 2 are downloadable
+            // content — credits/trailers/parodies are never "missing"
+            // (live defect 2026-07-26: Boruto reported 19 opening/ending
+            // sequences as missing episodes).
             var typeAttr = epno.Attribute("type")?.Value;
-            var isSpecial = typeAttr != "1";
+            if (typeAttr is not ("1" or "2"))
+            {
+                continue;
+            }
+            var isSpecial = typeAttr == "2";
             var digits = new string(epno.Value.Where(char.IsDigit).ToArray());
             if (!int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
             {

@@ -134,4 +134,33 @@ public class AniDbFetcherTests
         Assert.Null(outcome.Catalog);
         Assert.NotNull(outcome.Error);
     }
+
+    [Fact]
+    public void ParseAnime_CreditsTrailersParodies_AreNotContent()
+    {
+        // Live defect 2026-07-26: every Boruto "gap" was an opening/ending
+        // credit sequence. AniDB epno types: 1=regular, 2=special, 3=credits,
+        // 4=trailer, 5=parody, 6=other. Only 1 and 2 are downloadable content;
+        // 3-6 must never be reported as missing, even with IncludeSpecials on.
+        var xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <anime id="12661" restricted="false">
+              <episodes>
+                <episode id="1"><epno type="1">1</epno><airdate>2017-04-05</airdate><title xml:lang="en">Boruto Uzumaki</title></episode>
+                <episode id="2"><epno type="2">S1</epno><airdate>2017-04-01</airdate><title xml:lang="en">Episode S1</title></episode>
+                <episode id="3"><epno type="3">C1</epno><airdate>2017-04-05</airdate><title xml:lang="en">Opening 1</title></episode>
+                <episode id="4"><epno type="3">C8</epno><airdate>2017-04-12</airdate><title xml:lang="en">Ending 1</title></episode>
+                <episode id="5"><epno type="4">T1</epno><airdate>2017-03-01</airdate><title xml:lang="en">Teaser PV</title></episode>
+                <episode id="6"><epno type="5">P1</epno><airdate>2017-05-01</airdate><title xml:lang="en">Parody</title></episode>
+                <episode id="7"><epno type="6">O1</epno><airdate>2017-06-01</airdate><title xml:lang="en">Other</title></episode>
+              </episodes>
+            </anime>
+            """;
+        var (cat, err) = AniDbFetcher.ParseAnime(xml, new FakeClock(Now));
+        Assert.Null(err);
+        var ids = cat!.Episodes.Select(e => e.SourceEpisodeId).ToArray();
+        Assert.Equal(new[] { "1", "2" }, ids);
+        Assert.False(cat.Episodes.Single(e => e.SourceEpisodeId == "1").IsSpecial);
+        Assert.True(cat.Episodes.Single(e => e.SourceEpisodeId == "2").IsSpecial);
+    }
 }
