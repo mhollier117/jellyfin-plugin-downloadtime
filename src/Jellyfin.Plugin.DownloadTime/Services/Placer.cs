@@ -12,23 +12,31 @@ public static class Placer
     public static Placement? Infer(RemoteEpisode missing, IReadOnlyList<OwnedEpisode> owned, RemoteCatalog remote)
     {
         // Season-ful episodes (tuple catalogs AND season-ful ID catalogs like
-        // TVDB) place at the remote (Season, Number) directly — anchor math is
-        // only meaningful for season-less absolute numbering (AniDB entries),
-        // where the local scheme may be merged/split.
-        if (missing.Season.HasValue && missing.Number.HasValue)
+        // TVDB) place at the remote (Season, Number) directly. Synthesized
+        // unions are the exception: their Season is an AniDB entry ordinal,
+        // NOT a local season — those always use anchor math on the
+        // chain-monotonic AbsoluteNumber axis (M8, analysis 2026-07-26).
+        if (!remote.SynthesizedSeasons && missing.Season.HasValue && missing.Number.HasValue)
         {
             return new Placement(missing.Season.Value, missing.Number.Value);
         }
 
-        if (remote.IdProviderKey is null || !missing.Number.HasValue)
+        var targetAxis = remote.SynthesizedSeasons ? missing.AbsoluteNumber : missing.Number;
+        if (remote.IdProviderKey is null || !targetAxis.HasValue)
         {
             return null;
         }
 
-        // anchors: remote epno -> local (season, number), joined on episode IDs
+        // anchors: remote axis position -> local (season, number), joined on
+        // episode IDs. Axis = AbsoluteNumber for synthesized unions (monotonic
+        // across the entry chain), epno otherwise.
         var idToRemoteNumber = remote.Episodes
-            .Where(e => e.SourceEpisodeId is not null && e.Number.HasValue)
-            .ToDictionary(e => e.SourceEpisodeId!, e => e.Number!.Value, StringComparer.OrdinalIgnoreCase);
+            .Where(e => e.SourceEpisodeId is not null
+                        && (remote.SynthesizedSeasons ? e.AbsoluteNumber : e.Number).HasValue)
+            .ToDictionary(
+                e => e.SourceEpisodeId!,
+                e => (remote.SynthesizedSeasons ? e.AbsoluteNumber : e.Number)!.Value,
+                StringComparer.OrdinalIgnoreCase);
         var anchors = new List<(int RemoteN, int LocalS, int LocalN)>();
         foreach (var o in owned)
         {
@@ -44,7 +52,7 @@ public static class Placer
             return null;
         }
 
-        var target = missing.Number.Value;
+        var target = targetAxis.Value;
         (int RemoteN, int LocalS, int LocalN)? below = null, above = null;
         foreach (var a in anchors)
         {
