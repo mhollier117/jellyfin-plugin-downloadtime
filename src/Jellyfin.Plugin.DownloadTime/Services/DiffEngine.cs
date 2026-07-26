@@ -59,8 +59,14 @@ public static class DiffEngine
         // EITHER the (entry ordinal, epno) tuple (split layouts) OR absolute-
         // number coverage (merged layouts). Conservative OR: false-missing is
         // worse than false-owned.
+        // Synthesized specials carry Season = entry ordinal, but locals keep
+        // specials in season 0 — treat local S0 as a season wildcard for them
+        // (v1.2 season-less catalogs matched these; regression guard).
+        bool SeasonAgrees(RemoteEpisode e, OwnedEpisode o)
+            => e.Season is null || !o.Season.HasValue || o.Season == e.Season
+               || (remote.SynthesizedSeasons && e.IsSpecial && o.Season == 0);
         bool TupleMatch(RemoteEpisode e) => e.Number.HasValue && tupleOwned.Any(o =>
-            (e.Season is null || !o.Season.HasValue || o.Season == e.Season) && o.Covers(e.Number.Value));
+            SeasonAgrees(e, o) && o.Covers(e.Number.Value));
         bool AbsMatch(RemoteEpisode e) => remote.SynthesizedSeasons && e.AbsoluteNumber.HasValue
             && tupleOwned.Any(o => o.Covers(e.AbsoluteNumber.Value));
         bool IdMatch(RemoteEpisode e) => e.SourceEpisodeId is not null && ownedIds.Contains(e.SourceEpisodeId);
@@ -99,6 +105,18 @@ public static class DiffEngine
             missing.Add(new MissingEpisode(e, kind));
         }
 
+        // --- misidentification fail-safe (synthesized/anime only): owned
+        // episodes exist but not ONE matched anything — e.g. a wrong anidbid
+        // folder tag puts foreign episode ids on every local. Reporting the
+        // whole franchise missing would be pure noise; suppress and note it
+        // (extends M7 to "ids present but none match").
+        if (remote.SynthesizedSeasons && owned.Count > 0 && missing.Count > 0 && fallbackMatched == 0
+            && !remote.Episodes.Any(e => e.SourceEpisodeId is not null && ownedIds.Contains(e.SourceEpisodeId)))
+        {
+            notes.Add("None of the local episodes match this AniDB entry chain (wrong anidbid tag?) - skipping missing detection for this series (fail-safe).");
+            return new SeriesDiff(Array.Empty<MissingEpisode>(), notes);
+        }
+
         if (remote.SynthesizedSeasons && fallbackMatched > 0)
         {
             notes.Add($"{fallbackMatched} episode(s) matched via numbering fallback (no AniDB episode ids on those local files).");
@@ -108,7 +126,7 @@ public static class DiffEngine
         var strayIds = ownedIds.Count(id => !remote.Episodes.Any(e =>
             e.SourceEpisodeId is not null && string.Equals(e.SourceEpisodeId, id, StringComparison.OrdinalIgnoreCase)));
         var strayTuples = tupleOwned.Count(o => !remote.Episodes.Any(e =>
-            (e.Number.HasValue && (e.Season is null || !o.Season.HasValue || o.Season == e.Season) && o.Covers(e.Number.Value))
+            (e.Number.HasValue && SeasonAgrees(e, o) && o.Covers(e.Number.Value))
             || (remote.SynthesizedSeasons && e.AbsoluteNumber.HasValue && o.Covers(e.AbsoluteNumber.Value))));
         var stray = strayIds + strayTuples;
         if (stray > 0)

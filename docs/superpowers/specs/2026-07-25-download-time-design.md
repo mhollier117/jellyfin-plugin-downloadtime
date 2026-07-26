@@ -56,9 +56,12 @@ Tvdb > Tmdb > Imdb.
   a failed root entry errors the series. Lane label shows the chain size
   ("AniDB (3 entries)").
 - **Union catalog:** episodes across the chain carry Season = entry ordinal
-  (1-based), Number = epno within the entry, and AbsoluteNumber = cumulative
-  regular-episode position across the chain (specials none). The catalog is
-  flagged `SynthesizedSeasons` — ordinals are not trusted as local seasons.
+  (1-based over regular-bearing entries only — specials-only and Movie-type
+  entries never consume an ordinal), Number = epno within the entry, and
+  AbsoluteNumber = cumulative regular-episode position across the chain
+  (specials none; Movie-type entries' parts are demoted to specials). The
+  catalog is flagged `SynthesizedSeasons` — ordinals are not trusted as
+  local seasons.
 - Match owned↔remote **by AniDB episode ID** against the union — immune to
   Ronin merge/split/renumbering, and sequel-cour gaps are now detectable.
   Id-less locals fall back to (ordinal, epno) tuple OR AbsoluteNumber

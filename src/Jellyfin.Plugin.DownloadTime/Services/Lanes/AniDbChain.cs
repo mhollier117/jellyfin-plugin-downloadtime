@@ -23,20 +23,30 @@ public static class AniDbChain
 
         var episodes = new List<RemoteEpisode>();
         var absolute = 0;
+        var ordinal = 0;
         for (var i = 0; i < entries.Count; i++)
         {
-            var ordinal = i + 1;
+            // Only regular-bearing entries are local seasons: specials-only
+            // entries (specials collections, Movie-type sequels) must not
+            // consume an ordinal, or id-less split layouts shift by a whole
+            // cour. Their specials attach to the preceding regular-bearing
+            // cour (adversarial audit 2026-07-26).
+            if (entries[i].Episodes.Any(e => !e.IsSpecial))
+            {
+                ordinal++;
+            }
+            var season = Math.Max(1, ordinal);
             // regular episodes in epno order define the absolute sequence
             foreach (var ep in entries[i].Episodes.OrderBy(e => e.IsSpecial ? 1 : 0).ThenBy(e => e.Number ?? int.MaxValue))
             {
                 if (ep.IsSpecial)
                 {
-                    episodes.Add(ep with { Season = ordinal, AbsoluteNumber = null });
+                    episodes.Add(ep with { Season = season, AbsoluteNumber = null });
                 }
                 else
                 {
                     absolute++;
-                    episodes.Add(ep with { Season = ordinal, AbsoluteNumber = absolute });
+                    episodes.Add(ep with { Season = season, AbsoluteNumber = absolute });
                 }
             }
         }

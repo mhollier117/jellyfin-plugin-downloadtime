@@ -132,6 +132,13 @@ public class AniDbFetcher : IAniDbSource
             isEnded = AirTime.FromDate(end.Year, end.Month, end.Day) < clock.UtcNow;
         }
 
+        // Sequel relations sometimes point at Movie entries (a sequel film
+        // between cours). Movies are not episodes: their parts must never
+        // consume absolute-axis slots or entry ordinals in the union, so a
+        // Movie entry's episodes are demoted to specials here (adversarial
+        // audit 2026-07-26).
+        var isMovieEntry = string.Equals(doc.Root.Element("type")?.Value, "Movie", StringComparison.OrdinalIgnoreCase);
+
         var sequels = new List<string>();
         foreach (var rel in doc.Root.Element("relatedanime")?.Elements("anime") ?? Enumerable.Empty<XElement>())
         {
@@ -171,7 +178,7 @@ public class AniDbFetcher : IAniDbSource
             var title = ep.Elements("title").FirstOrDefault(t => (string?)t.Attribute(XNamespace.Xml + "lang") == "en")?.Value
                         ?? ep.Elements("title").FirstOrDefault()?.Value;
 
-            episodes.Add(new RemoteEpisode(null, number, id, aired, isSpecial, title));
+            episodes.Add(new RemoteEpisode(null, number, id, aired, isSpecial || isMovieEntry, title));
         }
 
         if (episodes.Count == 0)

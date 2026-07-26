@@ -134,3 +134,35 @@ same-season interpolation) layouts.
   visible.
 - **M2 placement across local-season boundaries** stays conservative (skip)
   by design.
+
+## Adversarial verification addendum (2026-07-26, tests/AdversarialAnimeTests.cs)
+
+Four defects found and fixed after an adversarial audit of this design:
+
+1. **Movie-type Sequel entries polluted the union.** A sequel film between
+   cours consumed an absolute slot and an entry ordinal, shifting every later
+   cour (false-missing for the last owned episode in merged id-less layouts;
+   whole-cour false-missing in split id-less layouts; the movie itself
+   reported as a missing episode for id-bearing libraries). Fix: `ParseEntry`
+   reads `<type>`; a Movie entry's parts are demoted to specials (no absolute
+   slot, no ordinal, excluded unless IncludeSpecials, still id-matchable).
+   Note: entries cached before this fix keep the old shape until TTL expiry.
+2. **Specials-only entries consumed an entry ordinal**, shifting id-less
+   split layouts by a cour. Fix: `BuildUnion` assigns ordinals to
+   regular-bearing entries only; a specials-only entry's episodes attach to
+   the preceding regular-bearing cour.
+3. **IncludeSpecials regression:** union specials carry Season = ordinal, so
+   an id-less local special in season 0 could no longer own them (v1.2's
+   season-less catalog matched by epno). Fix: local season 0 is a season
+   wildcard for synthesized specials in the tuple fallback.
+4. **M7 fail-safe did not cover "ids present but none match"** (wrong anidbid
+   folder tag): the whole franchise was reported missing. Fix: a synthesized
+   diff with owned episodes, zero id overlap with the chain, and zero
+   fallback matches suppresses missing output with an explanatory note.
+
+Verified residuals (unchanged, by design): tuple-OR false-own can mask a
+skipped cour when a local season label contradicts the canonical entry order
+(pinned in `F_IdlessSplit_LocalSeasonLabelCollidesWithWrongEntry_...`); a
+mid-chain fetch failure truncates the chain at the failure (no axis lies,
+partial-scan note; downstream owned episodes degrade to "unknown to the
+source" for that scan).
