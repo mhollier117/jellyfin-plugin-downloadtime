@@ -117,9 +117,25 @@ public class ScanService
         var usedFallback = false;
         RemoteCatalog? catalog = null;
         string? error = null;
+        var chainNotes = new List<string>();
         var cacheKey = $"{route.Kind}-{route.SourceId}".ToLowerInvariant();
         try
         {
+            if (route.Kind == SourceKind.AniDbId)
+            {
+                // Anime: walk the AniDB Sequel chain and diff against the union
+                // (analysis 2026-07-26 — merged AND split local layouts).
+                var (unionCatalog, entryCount, chainError) =
+                    await FetchAniDbUnionAsync(route.SourceId, settings, fullRefresh, chainNotes, ct).ConfigureAwait(false);
+                catalog = unionCatalog;
+                error = chainError;
+                if (entryCount > 1)
+                {
+                    lane = $"AniDB ({entryCount} entries)";
+                }
+            }
+            else
+            {
             if (!fullRefresh)
             {
                 catalog = _cache.TryGet<RemoteCatalog>(cacheKey, settings.EndedTtl) is { IsEnded: true } ended
@@ -131,7 +147,6 @@ public class ScanService
                 var outcome = route.Kind switch
                 {
                     SourceKind.TvdbId => await _tvdb.FetchByTvdbIdAsync(route.SourceId, ct).ConfigureAwait(false),
-                    SourceKind.AniDbId => await _anidb.FetchByAnimeIdAsync(route.SourceId, ct).ConfigureAwait(false),
                     SourceKind.TmdbId => await _tmdb.FetchSeriesAsync(route.SourceId, ct).ConfigureAwait(false),
                     SourceKind.ImdbId => await _tvmaze.FetchByImdbIdAsync(route.SourceId, ct).ConfigureAwait(false),
                     _ => FetchOutcome.Fail("unroutable"),
@@ -156,6 +171,7 @@ public class ScanService
                     _cache.Store(cacheKey, catalog);
                 }
             }
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -178,7 +194,64 @@ public class ScanService
             .Select(m => new MissingEpisodeDto(m.Episode.Season, m.Episode.Number, m.Episode.Title,
                                                m.Episode.AiredAt, m.Kind.ToString(), m.Episode.SourceEpisodeId))
             .ToList();
-        return Report(null, usedFallback, notes: diff.Notes, missing: missing);
+        var allNotes = chainNotes.Count == 0 ? diff.Notes : chainNotes.Concat(diff.Notes).ToList();
+        return Report(null, usedFallback, notes: allNotes, missing: missing);
+    }
+
+    /// <summary>
+    /// Walks the AniDB Sequel chain from the identified entry (BFS, cycle
+    /// guard, capped at AniDbChain.MaxEntries) and returns the union catalog.
+    /// Each entry is cached individually; sequel fetch failures degrade to a
+    /// partial union with a note — only a failed ROOT entry errors the series.
+    /// </summary>
+    private async Task<(RemoteCatalog? Catalog, int EntryCount, string? Error)> FetchAniDbUnionAsync(
+        string rootAid, ScanSettings settings, bool fullRefresh, List<string> notes, CancellationToken ct)
+    {
+        var entries = new List<RemoteCatalog>();
+        var queue = new Queue<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        queue.Enqueue(rootAid);
+
+        while (queue.Count > 0 && entries.Count < AniDbChain.MaxEntries)
+        {
+            var aid = queue.Dequeue();
+            if (!seen.Add(aid))
+            {
+                continue;
+            }
+
+            var key = $"anidb-entry-{aid}";
+            AniDbEntryCacheItem? item = null;
+            if (!fullRefresh)
+            {
+                item = _cache.TryGet<AniDbEntryCacheItem>(key, settings.EndedTtl) is { Catalog.IsEnded: true } ended
+                    ? ended
+                    : _cache.TryGet<AniDbEntryCacheItem>(key, settings.ContinuingTtl);
+            }
+            if (item is null)
+            {
+                var outcome = await _anidb.FetchEntryAsync(aid, ct).ConfigureAwait(false);
+                if (outcome.Catalog is null)
+                {
+                    if (entries.Count == 0)
+                    {
+                        return (null, 0, outcome.Error ?? "AniDB fetch failed");
+                    }
+                    notes.Add($"AniDB entry {aid} fetch failed ({outcome.Error}) - missing detection for its episodes is partial this scan.");
+                    continue;
+                }
+                item = new AniDbEntryCacheItem(outcome.Catalog, outcome.SequelIds);
+                _cache.Store(key, item);
+            }
+
+            entries.Add(item.Catalog);
+            foreach (var sequel in item.SequelIds)
+            {
+                queue.Enqueue(sequel);
+            }
+        }
+
+        return (AniDbChain.BuildUnion(entries), entries.Count, null);
     }
 
     private async Task<List<CollectionReportDto>> ScanMoviesAsync(

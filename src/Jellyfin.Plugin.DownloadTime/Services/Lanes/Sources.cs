@@ -11,6 +11,9 @@ public interface ITvmazeSource
 /// <summary>Single AniDB entry plus its outgoing Sequel relation ids.</summary>
 public sealed record AniDbEntryOutcome(RemoteCatalog? Catalog, IReadOnlyList<string> SequelIds, string? Error);
 
+/// <summary>Cache envelope for one AniDB entry (catalog + sequel ids).</summary>
+public sealed record AniDbEntryCacheItem(RemoteCatalog Catalog, IReadOnlyList<string> SequelIds);
+
 public interface IAniDbSource
 {
     Task<FetchOutcome> FetchByAnimeIdAsync(string anidbId, CancellationToken ct);

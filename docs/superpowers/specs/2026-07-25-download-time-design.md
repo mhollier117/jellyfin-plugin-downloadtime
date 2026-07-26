@@ -44,12 +44,27 @@ Tvdb > Tmdb > Imdb.
   keyless, independent database cross-referenced by TVDB ID). Report marks the
   series as served-by-fallback.
 
-### 2.2 AniDB lane (D:\Anime)
+### 2.2 AniDB lane (D:\Anime) — entry-chain design (revised 2026-07-26)
 - Fetch AniDB HTTP API (`http://api.anidb.net:9001/httpapi?request=anime&aid={id}...`)
-  with a registered client name — returns the entry's full episode list
-  (AniDB episode IDs, epno, type, air dates) in one request.
-- Match owned↔remote **by AniDB episode ID** — immune to Ronin
-  merge/split/renumbering.
+  with a registered client name — returns one entry's full episode list
+  (AniDB episode IDs, epno, type, air dates) plus its `<relatedanime>`
+  relations in one request.
+- **Entry chain:** from the identified entry, Sequel relations are followed
+  transitively (BFS, cycle guard, capped at 16 entries; each entry cached
+  individually with the standard TTLs and fetched through the 2 s pacer).
+  A failed sequel fetch degrades to a partial union with a per-series note;
+  a failed root entry errors the series. Lane label shows the chain size
+  ("AniDB (3 entries)").
+- **Union catalog:** episodes across the chain carry Season = entry ordinal
+  (1-based), Number = epno within the entry, and AbsoluteNumber = cumulative
+  regular-episode position across the chain (specials none). The catalog is
+  flagged `SynthesizedSeasons` — ordinals are not trusted as local seasons.
+- Match owned↔remote **by AniDB episode ID** against the union — immune to
+  Ronin merge/split/renumbering, and sequel-cour gaps are now detectable.
+  Id-less locals fall back to (ordinal, epno) tuple OR AbsoluteNumber
+  coverage (covers split and merged layouts; noted in the report when used).
+  Placement anchors on AbsoluteNumber, never on synthesized ordinals.
+  Full failure-mode analysis: `2026-07-26-anime-matching-analysis.md`.
 - Only `type=1` (regular) episodes count; specials follow the IncludeSpecials
   setting.
 - Hard throttle (min 2 s between requests) + aggressive caching (see 2.4).
