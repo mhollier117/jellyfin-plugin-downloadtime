@@ -190,10 +190,12 @@ public class AniDbFetcher : IAniDbSource
             episodes.Add(new RemoteEpisode(null, number, id, aired, isSpecial || isMovieEntry, title));
         }
 
-        if (episodes.Count == 0)
-        {
-            return (null, sequels, "AniDB anime entry contained zero parsable episodes");
-        }
+        // A well-formed entry with no content episodes is legitimate, not a
+        // failure: AniDB carries ANNOUNCED seasons (episodecount 0, no
+        // <episodes> element) and credits-only entries. Verified live
+        // 2026-07-26 against aid 17896 / 19433. It contributes nothing to the
+        // union; the caller's fail-safe still catches an empty ROOT entry for
+        // a series that has local files.
         return (new RemoteCatalog("AniDB", "AniDB", seriesId, isEnded, episodes), sequels, null);
     }
 }

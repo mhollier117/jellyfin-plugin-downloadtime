@@ -163,4 +163,45 @@ public class AniDbFetcherTests
         Assert.False(cat.Episodes.Single(e => e.SourceEpisodeId == "1").IsSpecial);
         Assert.True(cat.Episodes.Single(e => e.SourceEpisodeId == "2").IsSpecial);
     }
+
+    [Fact]
+    public void ParseAnime_AnnouncedEntryWithNoEpisodes_IsValidNotError()
+    {
+        // Verified live 2026-07-26 against AniDB: entry 17896 "Boruto (Dai Ni
+        // Bu)" and 19433 "Black Clover 2nd Season" are ANNOUNCED seasons with
+        // episodecount 0 and no <episodes> element. Nothing is missing from
+        // them; reporting a fetch failure falsely claims partial detection.
+        var xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <anime id="17896" restricted="false">
+              <type>TV Series</type>
+              <episodecount>0</episodecount>
+              <startdate>1970-01-01</startdate>
+              <titles><title xml:lang="en" type="main">Boruto (Dai Ni Bu)</title></titles>
+            </anime>
+            """;
+        var (cat, err) = AniDbFetcher.ParseAnime(xml, new FakeClock(Now));
+        Assert.Null(err);
+        Assert.NotNull(cat);
+        Assert.Empty(cat!.Episodes);
+        Assert.Equal("17896", cat.SeriesSourceId);
+    }
+
+    [Fact]
+    public void ParseAnime_CreditsOnlyEntry_IsValidNotError()
+    {
+        // Same rule after credits filtering: an entry holding only OP/ED
+        // sequences contributes no content, but is not a failure.
+        var xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <anime id="99999">
+              <episodes>
+                <episode id="1"><epno type="3">C1</epno><title xml:lang="en">Opening 1</title></episode>
+              </episodes>
+            </anime>
+            """;
+        var (cat, err) = AniDbFetcher.ParseAnime(xml, new FakeClock(Now));
+        Assert.Null(err);
+        Assert.Empty(cat!.Episodes);
+    }
 }
