@@ -5,6 +5,11 @@
   <startdate>2024-01-07</startdate>
   <enddate>2024-03-24</enddate>
   <titles><title xml:lang="en" type="main">7th Time Loop</title></titles>
+  <relatedanime>
+    <anime id="18800" type="Sequel">7th Time Loop Season 2</anime>
+    <anime id="18000" type="Prequel">7th Time Loop Zero</anime>
+    <anime id="18500" type="Side Story">7th Time Loop OVA</anime>
+  </relatedanime>
   <episodes>
     <episode id="274088" update="2024-01-07"><epno type="1">1</epno><length>24</length><airdate>2024-01-07</airdate><title xml:lang="en">Episode 1</title></episode>
     <episode id="274089" update="2024-01-14"><epno type="1">2</epno><length>24</length><airdate>2024-01-14</airdate><title xml:lang="en">Episode 2</title></episode>

@@ -31,11 +31,17 @@ public class AniDbFetcher : IAniDbSource
 
     public async Task<FetchOutcome> FetchByAnimeIdAsync(string anidbId, CancellationToken ct)
     {
+        var entry = await FetchEntryAsync(anidbId, ct).ConfigureAwait(false);
+        return entry.Error is null ? FetchOutcome.Ok(entry.Catalog!) : FetchOutcome.Fail(entry.Error);
+    }
+
+    public async Task<AniDbEntryOutcome> FetchEntryAsync(string anidbId, CancellationToken ct)
+    {
         // Client strings are registered under a specific AniDB account; each
         // installer must supply their OWN (Settings -> AniDB client name).
         if (string.IsNullOrWhiteSpace(_clientId().Name))
         {
-            return FetchOutcome.Fail("AniDB client not configured — register your own HTTP client at anidb.net/software/add and enter its name in Download Time settings.");
+            return Fail("AniDB client not configured — register your own HTTP client at anidb.net/software/add and enter its name in Download Time settings.");
         }
 
         await _gate.WaitAsync(ct).ConfigureAwait(false);
@@ -57,7 +63,7 @@ public class AniDbFetcher : IAniDbSource
             using var resp = await _http.GetAsync(url, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
-                return FetchOutcome.Fail($"AniDB HTTP {(int)resp.StatusCode}");
+                return Fail($"AniDB HTTP {(int)resp.StatusCode}");
             }
             var bytes = await resp.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
             // AniDB serves gzip-compressed XML regardless of Accept-Encoding.
@@ -69,12 +75,14 @@ public class AniDbFetcher : IAniDbSource
                 bytes = outMs.ToArray();
             }
             var xml = System.Text.Encoding.UTF8.GetString(bytes);
-            var (catalog, error) = ParseAnime(xml, _clock);
-            return error is null ? FetchOutcome.Ok(catalog!) : FetchOutcome.Fail(error);
+            var (catalog, sequels, error) = ParseEntry(xml, _clock);
+            return error is null
+                ? new AniDbEntryOutcome(catalog, sequels, null)
+                : Fail(error);
         }
         catch (HttpRequestException ex)
         {
-            return FetchOutcome.Fail($"AniDB request failed: {ex.Message}");
+            return Fail($"AniDB request failed: {ex.Message}");
         }
         finally
         {
@@ -82,8 +90,17 @@ public class AniDbFetcher : IAniDbSource
         }
     }
 
-    /// <summary>Pure parser for the httpapi anime response.</summary>
+    private static AniDbEntryOutcome Fail(string error) => new(null, Array.Empty<string>(), error);
+
+    /// <summary>Pure parser for the httpapi anime response (catalog only; kept for compatibility).</summary>
     public static (RemoteCatalog? Catalog, string? Error) ParseAnime(string xml, IClock clock)
+    {
+        var (catalog, _, error) = ParseEntry(xml, clock);
+        return (catalog, error);
+    }
+
+    /// <summary>Pure parser for the httpapi anime response, including Sequel relation ids.</summary>
+    public static (RemoteCatalog? Catalog, IReadOnlyList<string> SequelIds, string? Error) ParseEntry(string xml, IClock clock)
     {
         XDocument doc;
         try
@@ -92,20 +109,20 @@ public class AniDbFetcher : IAniDbSource
         }
         catch (System.Xml.XmlException ex)
         {
-            return (null, $"AniDB XML parse error: {ex.Message}");
+            return (null, Array.Empty<string>(), $"AniDB XML parse error: {ex.Message}");
         }
 
         if (doc.Root is null)
         {
-            return (null, "AniDB response empty");
+            return (null, Array.Empty<string>(), "AniDB response empty");
         }
         if (doc.Root.Name.LocalName == "error")
         {
-            return (null, $"AniDB error: {doc.Root.Value}");
+            return (null, Array.Empty<string>(), $"AniDB error: {doc.Root.Value}");
         }
         if (doc.Root.Name.LocalName != "anime")
         {
-            return (null, $"AniDB unexpected root <{doc.Root.Name.LocalName}>");
+            return (null, Array.Empty<string>(), $"AniDB unexpected root <{doc.Root.Name.LocalName}>");
         }
 
         var seriesId = doc.Root.Attribute("id")?.Value ?? string.Empty;
@@ -113,6 +130,19 @@ public class AniDbFetcher : IAniDbSource
         if (DateOnly.TryParse(doc.Root.Element("enddate")?.Value, out var end))
         {
             isEnded = AirTime.FromDate(end.Year, end.Month, end.Day) < clock.UtcNow;
+        }
+
+        var sequels = new List<string>();
+        foreach (var rel in doc.Root.Element("relatedanime")?.Elements("anime") ?? Enumerable.Empty<XElement>())
+        {
+            if (string.Equals(rel.Attribute("type")?.Value, "Sequel", StringComparison.OrdinalIgnoreCase))
+            {
+                var rid = rel.Attribute("id")?.Value;
+                if (!string.IsNullOrEmpty(rid))
+                {
+                    sequels.Add(rid);
+                }
+            }
         }
 
         var episodes = new List<RemoteEpisode>();
@@ -146,8 +176,8 @@ public class AniDbFetcher : IAniDbSource
 
         if (episodes.Count == 0)
         {
-            return (null, "AniDB anime entry contained zero parsable episodes");
+            return (null, sequels, "AniDB anime entry contained zero parsable episodes");
         }
-        return (new RemoteCatalog("AniDB", "AniDB", seriesId, isEnded, episodes), null);
+        return (new RemoteCatalog("AniDB", "AniDB", seriesId, isEnded, episodes), sequels, null);
     }
 }

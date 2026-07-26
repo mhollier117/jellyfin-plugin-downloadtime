@@ -8,7 +8,21 @@ public interface ITvmazeSource
     Task<FetchOutcome> FetchByTvdbIdAsync(string tvdbId, CancellationToken ct);
     Task<FetchOutcome> FetchByImdbIdAsync(string imdbId, CancellationToken ct);
 }
-public interface IAniDbSource { Task<FetchOutcome> FetchByAnimeIdAsync(string anidbId, CancellationToken ct); }
+/// <summary>Single AniDB entry plus its outgoing Sequel relation ids.</summary>
+public sealed record AniDbEntryOutcome(RemoteCatalog? Catalog, IReadOnlyList<string> SequelIds, string? Error);
+
+public interface IAniDbSource
+{
+    Task<FetchOutcome> FetchByAnimeIdAsync(string anidbId, CancellationToken ct);
+
+    /// <summary>Entry fetch for chain walking. Default implementation adapts
+    /// FetchByAnimeIdAsync with no sequels (keeps pre-chain fakes valid).</summary>
+    async Task<AniDbEntryOutcome> FetchEntryAsync(string anidbId, CancellationToken ct)
+    {
+        var o = await FetchByAnimeIdAsync(anidbId, ct).ConfigureAwait(false);
+        return new AniDbEntryOutcome(o.Catalog, Array.Empty<string>(), o.Error);
+    }
+}
 public sealed record CollectionOutcome(CollectionCatalog? Catalog, string? Error, bool NoCollection);
 public interface ITmdbSource
 {
