@@ -21,6 +21,7 @@
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="CreateVirtualEpisodes"/><span>Create native missing-episode placeholders (users must enable &quot;Display missing episodes&quot; in their display settings)</span></label>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ShowPosterBadges"/><span>Show poster badges</span></label>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ShowDetailBadges"/><span>Show series-page summary line</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ShowUserPage"/><span>Show the Missing Media page to all users (drawer entry; read-only for non-admins)</span></label>
         <div class="inputContainer"><input is="emby-input" type="number" id="RequestDelayMs" min="0" label="Request throttle (ms, scrapers + AniDB)"/></div>
         <div class="inputContainer"><input is="emby-input" type="text" id="ExcludedItemIds" label="Muted item ids (comma-separated)"/></div>
         <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
@@ -36,7 +37,7 @@
   <script type="text/javascript">
   (function () {
     var pluginId = "4d557ba6-d562-4209-9a04-b782775dc2ff";
-    var fields = ["EnableTvLane","EnableAnimeLane","EnableMovieLane","IncludeSpecials","CreateVirtualEpisodes","ShowPosterBadges","ShowDetailBadges"];
+    var fields = ["EnableTvLane","EnableAnimeLane","EnableMovieLane","IncludeSpecials","CreateVirtualEpisodes","ShowPosterBadges","ShowDetailBadges","ShowUserPage"];
     var texts = ["TmdbApiKey","AniDbClientName","AniDbClientVersion","GraceHours","MovieReleaseBufferDays","RequestDelayMs"];
 
     function loadConfig(page) {

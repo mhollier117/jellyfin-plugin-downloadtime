@@ -21,6 +21,7 @@ public class ConfigurationTests
         Assert.False(c.CreateVirtualEpisodes);
         Assert.True(c.ShowPosterBadges);
         Assert.True(c.ShowDetailBadges);
+        Assert.True(c.ShowUserPage);
         Assert.Empty(c.ExcludedItemIds);
         Assert.Equal(2000, c.RequestDelayMs);
         // Deliberately blank: AniDB client strings are per-account registrations;
@@ -29,6 +30,13 @@ public class ConfigurationTests
         Assert.Equal(1, c.AniDbClientVersion);
         Assert.Equal(1, c.ContinuingTtlDays);
         Assert.Equal(7, c.EndedTtlDays);
+    }
+
+    [Fact]
+    public void ShowUserPage_DefaultsOn_AndAssignable()
+    {
+        Assert.True(new PluginConfiguration().ShowUserPage);
+        Assert.False(new PluginConfiguration { ShowUserPage = false }.ShowUserPage);
     }
 
     [Fact]

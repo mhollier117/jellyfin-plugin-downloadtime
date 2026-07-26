@@ -1,0 +1,102 @@
+/* Download Time — user-facing Missing Media overlay. All selectors prefixed dt-uv-. */
+.dt-uv-overlay { position: fixed; inset: 0; z-index: 999; display: none; background: #0f1115; color: rgba(255,255,255,.9);
+  font-family: inherit; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.dt-uv-overlay.dt-uv-open { display: block; }
+.dt-uv-shell { max-width: 62em; margin: 0 auto; padding: 1em 1.2em 4em; }
+
+.dt-uv-nav-item { cursor: pointer; }
+
+/* header */
+.dt-uv-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5em 1em; padding-top: .4em; }
+.dt-uv-head h1 { margin: 0; font-size: 1.5em; font-weight: 600; }
+.dt-uv-fresh { color: rgba(255,255,255,.55); font-size: .9em; }
+.dt-uv-headbtns { margin-left: auto; display: flex; gap: .5em; align-items: center; }
+.dt-uv-btn { font: inherit; font-size: .9em; color: inherit; background: rgba(255,255,255,.09); border: none; border-radius: 6px;
+  padding: .5em 1.1em; cursor: pointer; }
+.dt-uv-btn:hover { background: rgba(255,255,255,.14); }
+.dt-uv-btn:disabled { opacity: .45; cursor: default; }
+.dt-uv-btn:focus-visible, .dt-uv-close:focus-visible, .dt-uv-tile:focus-visible, .dt-uv-chip:focus-visible { outline: 2px solid #c77400; outline-offset: 2px; }
+.dt-uv-close { position: sticky; float: right; top: .6em; margin-left: 1em; font-size: 1.35em; line-height: 1; background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.75); border: none; border-radius: 50%; width: 1.7em; height: 1.7em; cursor: pointer; }
+.dt-uv-close:hover { background: rgba(255,255,255,.16); color: #fff; }
+.dt-uv-scanstate { color: #c77400; font-size: .9em; display: none; align-items: center; gap: .45em; }
+.dt-uv-scanstate.dt-uv-on { display: inline-flex; }
+.dt-uv-spin { width: .85em; height: .85em; border: 2px solid rgba(199,116,0,.25); border-top-color: #c77400; border-radius: 50%;
+  animation: dt-uv-rot .8s linear infinite; }
+@keyframes dt-uv-rot { to { transform: rotate(360deg); } }
+
+/* tiles */
+.dt-uv-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6em; margin: 1em 0; }
+.dt-uv-tile { background: rgba(255,255,255,.055); border: 1px solid transparent; border-radius: 8px; padding: .8em .95em .7em;
+  cursor: pointer; text-align: left; font: inherit; color: inherit; transition: background .15s, border-color .15s; }
+.dt-uv-tile:hover { background: rgba(255,255,255,.09); }
+.dt-uv-tile.dt-uv-sel { border-color: #c77400; background: rgba(199,116,0,.16); }
+.dt-uv-tile .dt-uv-n { display: block; font-size: 1.6em; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.dt-uv-tile .dt-uv-l { display: block; margin-top: .15em; font-size: .78em; color: rgba(255,255,255,.55); text-transform: uppercase; letter-spacing: .06em; }
+.dt-uv-tile.dt-uv-t-new .dt-uv-n { color: #c77400; }
+.dt-uv-tile.dt-uv-t-gap .dt-uv-n { color: #6e8ca8; }
+
+/* toolbar */
+.dt-uv-bar { display: flex; flex-wrap: wrap; gap: .55em; align-items: center; margin-bottom: 1em; }
+.dt-uv-search { flex: 1 1 13em; min-width: 10em; font: inherit; font-size: .95em; color: inherit; background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.12); border-radius: 6px; padding: .5em .8em; }
+.dt-uv-search:focus { outline: none; border-color: #c77400; }
+.dt-uv-chips { display: flex; flex-wrap: wrap; gap: .35em; }
+.dt-uv-chip { font: inherit; font-size: .82em; color: rgba(255,255,255,.55); background: rgba(255,255,255,.055); border: 1px solid transparent;
+  border-radius: 999px; padding: .3em .85em; cursor: pointer; }
+.dt-uv-chip:hover { background: rgba(255,255,255,.09); color: inherit; }
+.dt-uv-chip.dt-uv-sel { background: rgba(199,116,0,.16); border-color: #c77400; color: inherit; }
+.dt-uv-sort { margin-left: auto; font: inherit; font-size: .88em; color: inherit; background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.12); border-radius: 6px; padding: .4em .6em; }
+.dt-uv-sort option { color: #000; }
+
+/* sections + cards */
+.dt-uv-sect { margin: 1.4em 0 .5em; font-size: .82em; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: rgba(255,255,255,.38); }
+.dt-uv-card { background: rgba(255,255,255,.055); border-radius: 8px; margin-bottom: .55em; overflow: hidden; }
+.dt-uv-row { display: flex; align-items: center; gap: .85em; padding: .6em .8em; cursor: pointer; }
+.dt-uv-row:hover { background: rgba(255,255,255,.09); }
+.dt-uv-poster { flex: 0 0 44px; width: 44px; height: 66px; border-radius: 5px; overflow: hidden; background: rgba(110,140,168,.16); position: relative; }
+.dt-uv-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dt-uv-mono { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.5em; font-weight: 650; color: #6e8ca8; }
+.dt-uv-main { flex: 1 1 auto; min-width: 0; }
+.dt-uv-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt-uv-meta { display: flex; flex-wrap: wrap; gap: .35em; margin-top: .3em; align-items: center; }
+.dt-uv-pill { font-size: .7em; padding: .12em .55em; border-radius: 999px; background: rgba(255,255,255,.09); color: rgba(255,255,255,.55); letter-spacing: .04em; }
+.dt-uv-pill.dt-uv-warn { background: rgba(204,92,92,.16); color: #cc5c5c; }
+.dt-uv-cg { font-size: .76em; padding: .14em .6em; border-radius: 999px; background: rgba(110,140,168,.16); color: #6e8ca8; font-variant-numeric: tabular-nums; }
+.dt-uv-cn { font-size: .76em; padding: .14em .6em; border-radius: 999px; background: rgba(199,116,0,.16); color: #c77400; font-variant-numeric: tabular-nums; }
+.dt-uv-ctl { display: flex; align-items: center; gap: .15em; flex: 0 0 auto; }
+.dt-uv-ibtn { font: inherit; background: none; border: none; color: rgba(255,255,255,.38); cursor: pointer; padding: .35em .45em; border-radius: 5px; font-size: 1.05em; line-height: 1; }
+.dt-uv-ibtn:hover { color: inherit; background: rgba(255,255,255,.08); }
+.dt-uv-chev { transition: transform .16s ease; display: inline-block; }
+.dt-uv-card.dt-uv-openc .dt-uv-chev { transform: rotate(90deg); }
+.dt-uv-detail { display: none; border-top: 1px solid rgba(255,255,255,.1); padding: .35em .8em .7em; }
+.dt-uv-card.dt-uv-openc .dt-uv-detail { display: block; }
+.dt-uv-season { margin: .65em 0 .2em; font-size: .76em; font-weight: 600; color: rgba(255,255,255,.38); letter-spacing: .06em; text-transform: uppercase; }
+.dt-uv-ep { display: flex; align-items: baseline; gap: .6em; padding: .22em 0; font-size: .9em; }
+.dt-uv-code { font-family: ui-monospace, Consolas, monospace; font-size: .85em; color: rgba(255,255,255,.55); flex: 0 0 4.6em; }
+.dt-uv-eptitle { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt-uv-epdate { color: rgba(255,255,255,.38); font-size: .85em; flex: 0 0 auto; }
+.dt-uv-k { font-size: .68em; padding: .1em .5em; border-radius: 999px; flex: 0 0 auto; }
+.dt-uv-k.dt-uv-g { background: rgba(110,140,168,.16); color: #6e8ca8; }
+.dt-uv-k.dt-uv-n { background: rgba(199,116,0,.16); color: #c77400; }
+.dt-uv-more { margin-top: .5em; font: inherit; font-size: .84em; color: #c77400; background: none; border: 1px solid rgba(199,116,0,.3); border-radius: 5px; padding: .35em .9em; cursor: pointer; }
+.dt-uv-more:hover { background: rgba(199,116,0,.16); }
+.dt-uv-note { color: rgba(255,255,255,.38); font-size: .84em; margin-top: .5em; font-style: italic; }
+.dt-uv-via { color: rgba(255,255,255,.38); font-size: .8em; }
+.dt-uv-err { display: flex; gap: .7em; align-items: baseline; padding: .3em 0; font-size: .88em; }
+.dt-uv-errname { font-weight: 600; flex: 0 0 auto; }
+.dt-uv-errmsg { color: #cc5c5c; min-width: 0; overflow-wrap: anywhere; }
+.dt-uv-fold { margin: 1.2em 0; }
+.dt-uv-fold summary { cursor: pointer; color: rgba(255,255,255,.55); font-size: .9em; padding: .4em 0; }
+.dt-uv-hero { text-align: center; padding: 4em 1em 5em; }
+.dt-uv-hero .dt-uv-big { font-size: 2.6em; }
+.dt-uv-hero h2 { margin: .4em 0 .2em; font-weight: 600; }
+.dt-uv-hero p { color: rgba(255,255,255,.55); margin: 0; }
+
+@media (max-width: 42em) {
+  .dt-uv-tiles { grid-template-columns: repeat(2, 1fr); }
+  .dt-uv-sort { margin-left: 0; }
+  .dt-uv-epdate { display: none; }
+  .dt-uv-shell { padding: .8em .8em 4em; }
+}

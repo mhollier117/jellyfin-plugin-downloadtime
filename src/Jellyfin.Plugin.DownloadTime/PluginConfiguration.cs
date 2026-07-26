@@ -27,6 +27,9 @@ public class PluginConfiguration : BasePluginConfiguration
 
     public bool ShowDetailBadges { get; set; } = true;
 
+    /// <summary>Inject the user-facing Missing Media page (drawer entry + overlay) for all logged-in users.</summary>
+    public bool ShowUserPage { get; set; } = true;
+
     /// <summary>Muted item ids (series or movie ids as N-format GUID strings).</summary>
     public string[] ExcludedItemIds { get; set; } = System.Array.Empty<string>();
 

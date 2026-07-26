@@ -29,6 +29,8 @@
     <EmbeddedResource Include="reportPage.html" />
     <EmbeddedResource Include="Web\badges.js" />
     <EmbeddedResource Include="Web\badges.css" />
+    <EmbeddedResource Include="Web\userview.js" />
+    <EmbeddedResource Include="Web\userview.css" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Jellyfin.Controller" Version="$(JellyfinPackageVersion)" />

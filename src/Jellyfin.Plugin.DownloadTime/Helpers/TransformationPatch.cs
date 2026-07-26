@@ -26,13 +26,24 @@ public static partial class TransformationPatch
             return payload.Contents ?? string.Empty;
         }
         var config = Plugin.Instance?.Configuration ?? new PluginConfiguration();
-        if (!config.ShowPosterBadges && !config.ShowDetailBadges)
+        var badges = config.ShowPosterBadges || config.ShowDetailBadges;
+        if (!badges && !config.ShowUserPage)
         {
             return payload.Contents;
         }
-        var settings = $"<script>window.DownloadTimeConfig={{poster:{config.ShowPosterBadges.ToString().ToLowerInvariant()},detail:{config.ShowDetailBadges.ToString().ToLowerInvariant()}}};</script>";
-        var css = ReadResource("Web.badges.css");
-        var js = ReadResource("Web.badges.js");
+        var settings = $"<script>window.DownloadTimeConfig={{poster:{config.ShowPosterBadges.ToString().ToLowerInvariant()},detail:{config.ShowDetailBadges.ToString().ToLowerInvariant()},userPage:{config.ShowUserPage.ToString().ToLowerInvariant()}}};</script>";
+        var css = new System.Text.StringBuilder();
+        var js = new System.Text.StringBuilder();
+        if (badges)
+        {
+            css.Append(ReadResource("Web.badges.css"));
+            js.Append(ReadResource("Web.badges.js")).Append('\n');
+        }
+        if (config.ShowUserPage)
+        {
+            css.Append(ReadResource("Web.userview.css"));
+            js.Append(ReadResource("Web.userview.js"));
+        }
         var result = HeadEnd().Replace(payload.Contents, $"{settings}<style>{css}</style>$1", 1);
         return BodyEnd().Replace(result, $"<script defer>{js}</script>$1", 1);
     }
