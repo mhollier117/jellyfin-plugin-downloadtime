@@ -21,7 +21,7 @@ public class ForeignPlaceholderSweepTests
         null);
 
     private static ForeignPlaceholder Foreign(Guid id, params (string Key, string Value)[] ids) => new(
-        id,
+        id, 2, 1,
         ids.ToDictionary(i => i.Key, i => i.Value, StringComparer.OrdinalIgnoreCase));
 
     [Fact]

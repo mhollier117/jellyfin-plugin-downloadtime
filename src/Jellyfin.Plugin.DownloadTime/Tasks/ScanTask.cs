@@ -63,7 +63,7 @@ public class ScanTask : IScheduledTask
             // Phantom sweep: foreign virtual episodes (other writers') that
             // provably duplicate owned files are junk in any layout — remove
             // them regardless of the create-placeholders setting.
-            var duplicates = VirtualEpisodePlanner.ForeignDuplicates(owned, _writer.GetForeignVirtual(seriesId));
+            var duplicates = VirtualEpisodePlanner.ForeignDuplicates(owned, _writer.GetForeignVirtual(seriesId), catalog);
             if (duplicates.Count > 0)
             {
                 swept += _writer.DeleteForeignDuplicates(duplicates);

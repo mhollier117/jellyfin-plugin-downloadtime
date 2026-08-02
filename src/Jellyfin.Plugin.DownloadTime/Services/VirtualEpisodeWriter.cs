@@ -49,7 +49,8 @@ public class VirtualEpisodeWriter
             .Where(e => e.IsVirtualItem
                         && !(e.ProviderIds.TryGetValue(MarkerProviderKey, out var m) && !string.IsNullOrEmpty(m)))
             .Select(e => new ForeignPlaceholder(
-                e.Id, new Dictionary<string, string>(e.ProviderIds, StringComparer.OrdinalIgnoreCase)))
+                e.Id, e.ParentIndexNumber, e.IndexNumber,
+                new Dictionary<string, string>(e.ProviderIds, StringComparer.OrdinalIgnoreCase)))
             .ToList();
     }
 
