@@ -3,8 +3,8 @@
     <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">12.0</JellyfinVersion>
     <AssemblyName>Jellyfin.Plugin.DownloadTime</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.DownloadTime</RootNamespace>
-    <AssemblyVersion>1.3.3.0</AssemblyVersion>
-    <FileVersion>1.3.3.0</FileVersion>
+    <AssemblyVersion>1.3.4.0</AssemblyVersion>
+    <FileVersion>1.3.4.0</FileVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
