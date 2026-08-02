@@ -47,6 +47,7 @@ public class ScanTask : IScheduledTask
         var config = Plugin.Instance?.Configuration ?? new PluginConfiguration();
         var ownedBySeries = _libraryReader.GetSeries().ToDictionary(s => s.Id, s => s.Episodes);
         var applied = 0;
+        var swept = 0;
         foreach (var (seriesId, (diff, catalog)) in _runner.Scan.LastDiffs)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -58,10 +59,23 @@ public class ScanTask : IScheduledTask
             {
                 applied += _writer.Apply(seriesId, plan);
             }
+
+            // Phantom sweep: foreign virtual episodes (other writers') that
+            // provably duplicate owned files are junk in any layout — remove
+            // them regardless of the create-placeholders setting.
+            var duplicates = VirtualEpisodePlanner.ForeignDuplicates(owned, _writer.GetForeignVirtual(seriesId));
+            if (duplicates.Count > 0)
+            {
+                swept += _writer.DeleteForeignDuplicates(duplicates);
+            }
         }
         if (applied > 0)
         {
             _logger.LogInformation("Download Time: applied {Count} virtual placeholder operation(s).", applied);
+        }
+        if (swept > 0)
+        {
+            _logger.LogInformation("Download Time: removed {Count} duplicate virtual episode(s) that shadow owned files.", swept);
         }
     }
 }

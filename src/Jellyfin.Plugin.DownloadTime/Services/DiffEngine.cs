@@ -19,13 +19,44 @@ public static class DiffEngine
         var tupleOwned = new List<OwnedEpisode>();  // participate in tuple matching
         var unnumbered = 0;
         var seasonless = remote.Episodes.Count > 0 && remote.Episodes.All(e => e.Season is null);
+
+        // Id reliability: two FILES can never be the same episode, so the same
+        // per-episode id on 2+ locals proves the metadata provider misidentified
+        // them (live Bleach shape 2026-08-02: split-era AniDB stamping survived a
+        // Ronin merge). Untrustworthy ids demote the series to numbering
+        // fallback for id-bearing locals too — never report owned eps missing.
+        var unreliableIds = false;
+        if (idKey is not null)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var o in owned)
+            {
+                if (o.ProviderIds.TryGetValue(idKey, out var id) && !string.IsNullOrEmpty(id) && !seen.Add(id))
+                {
+                    unreliableIds = true;
+                    break;
+                }
+            }
+        }
+        if (unreliableIds)
+        {
+            notes.Add("Local episode ids are duplicated across files (metadata misidentification) - matching id-bearing episodes by numbering fallback as well.");
+        }
+
         foreach (var o in owned)
         {
             var hasId = idKey is not null && o.ProviderIds.TryGetValue(idKey, out var id) && !string.IsNullOrEmpty(id);
             if (hasId)
             {
                 ownedIds.Add(o.ProviderIds[idKey!]);
-                continue; // ID-bearing locals match by ID only (spec: tuple fallback is for id-less locals)
+                // ID-bearing locals match by ID only (spec: tuple fallback is
+                // for id-less locals) — UNLESS the series' ids are provably
+                // unreliable; then their numbering also participates.
+                if (unreliableIds && o.Number.HasValue && (o.Season.HasValue || seasonless))
+                {
+                    tupleOwned.Add(o);
+                }
+                continue;
             }
             if (o.Number.HasValue && (o.Season.HasValue || seasonless))
             {
@@ -69,6 +100,18 @@ public static class DiffEngine
             SeasonAgrees(e, o) && o.Covers(e.Number.Value));
         bool AbsMatch(RemoteEpisode e) => remote.SynthesizedSeasons && e.AbsoluteNumber.HasValue
             && tupleOwned.Any(o => o.Covers(e.AbsoluteNumber.Value));
+        // Season-ful tuple catalogs (TVDB shape) against a merged local layout:
+        // aired SxxEyy has no local (S,E) twin — presence lives on the
+        // cumulative absolute axis instead (live Bleach shape 2026-08-02).
+        var cumulativeAbs = !remote.SynthesizedSeasons
+                            && remote.Episodes.Any(e => e.Season is > 1)
+                            && Layout.MergedSeasonOne(owned)
+            ? Layout.AbsoluteIndex(remote)
+            : null;
+        bool CumulativeAbsMatch(RemoteEpisode e) => cumulativeAbs is not null
+            && e.Season.HasValue && e.Number.HasValue && !IsSpecialEp(e)
+            && cumulativeAbs.TryGetValue((e.Season.Value, e.Number.Value), out var abs)
+            && tupleOwned.Any(o => o.Covers(abs));
         bool IdMatch(RemoteEpisode e) => e.SourceEpisodeId is not null && ownedIds.Contains(e.SourceEpisodeId);
         var fallbackMatched = 0;
         bool IsOwned(RemoteEpisode e)
@@ -77,7 +120,7 @@ public static class DiffEngine
             {
                 return true;
             }
-            if (TupleMatch(e) || AbsMatch(e))
+            if (TupleMatch(e) || AbsMatch(e) || CumulativeAbsMatch(e))
             {
                 fallbackMatched++;
                 return true;
@@ -119,7 +162,7 @@ public static class DiffEngine
 
         if (remote.SynthesizedSeasons && fallbackMatched > 0)
         {
-            notes.Add($"{fallbackMatched} episode(s) matched via numbering fallback (no AniDB episode ids on those local files).");
+            notes.Add($"{fallbackMatched} episode(s) matched via numbering fallback (AniDB episode ids missing or unreliable on those local files).");
         }
 
         // --- "library exceeds source" note --------------------------------------
@@ -127,7 +170,9 @@ public static class DiffEngine
             e.SourceEpisodeId is not null && string.Equals(e.SourceEpisodeId, id, StringComparison.OrdinalIgnoreCase)));
         var strayTuples = tupleOwned.Count(o => !remote.Episodes.Any(e =>
             (e.Number.HasValue && SeasonAgrees(e, o) && o.Covers(e.Number.Value))
-            || (remote.SynthesizedSeasons && e.AbsoluteNumber.HasValue && o.Covers(e.AbsoluteNumber.Value))));
+            || (remote.SynthesizedSeasons && e.AbsoluteNumber.HasValue && o.Covers(e.AbsoluteNumber.Value))
+            || (cumulativeAbs is not null && e.Season.HasValue && e.Number.HasValue
+                && cumulativeAbs.TryGetValue((e.Season.Value, e.Number.Value), out var abs) && o.Covers(abs))));
         var stray = strayIds + strayTuples;
         if (stray > 0)
         {

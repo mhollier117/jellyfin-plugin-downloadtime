@@ -18,6 +18,16 @@ public static class Placer
         // chain-monotonic AbsoluteNumber axis (M8, analysis 2026-07-26).
         if (!remote.SynthesizedSeasons && missing.Season.HasValue && missing.Number.HasValue)
         {
+            // Merged-absolute local layout (live Bleach shape 2026-08-02): the
+            // aired (S,E) tuple is NOT a local position — leftover empty
+            // aired-season rows would swallow the placeholder. Place at local
+            // S1 on the cumulative absolute axis instead.
+            if (!missing.IsSpecial && missing.Season.Value >= 1 && Layout.MergedAbsolute(owned, remote))
+            {
+                return Layout.AbsoluteIndex(remote).TryGetValue((missing.Season.Value, missing.Number.Value), out var abs)
+                    ? new Placement(1, abs)
+                    : null;
+            }
             return new Placement(missing.Season.Value, missing.Number.Value);
         }
 

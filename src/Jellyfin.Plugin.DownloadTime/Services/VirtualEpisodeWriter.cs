@@ -38,6 +38,42 @@ public class VirtualEpisodeWriter
             .ToList();
     }
 
+    /// <summary>Virtual episodes some OTHER writer created (no DownloadTime marker).</summary>
+    public IReadOnlyList<ForeignPlaceholder> GetForeignVirtual(Guid seriesId)
+    {
+        if (_libraryManager.GetItemById(seriesId) is not Series series)
+        {
+            return Array.Empty<ForeignPlaceholder>();
+        }
+        return series.GetRecursiveChildren().OfType<Episode>()
+            .Where(e => e.IsVirtualItem
+                        && !(e.ProviderIds.TryGetValue(MarkerProviderKey, out var m) && !string.IsNullOrEmpty(m)))
+            .Select(e => new ForeignPlaceholder(
+                e.Id, new Dictionary<string, string>(e.ProviderIds, StringComparer.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Deletes foreign virtual episodes previously identified as owned-file
+    /// duplicates (VirtualEpisodePlanner.ForeignDuplicates). Only virtual,
+    /// non-marker episodes are ever touched.
+    /// </summary>
+    public int DeleteForeignDuplicates(IReadOnlyList<Guid> itemIds)
+    {
+        var ops = 0;
+        foreach (var id in itemIds)
+        {
+            if (_libraryManager.GetItemById(id) is Episode ep
+                && ep.IsVirtualItem
+                && !ep.ProviderIds.ContainsKey(MarkerProviderKey))
+            {
+                _libraryManager.DeleteItem(ep, new DeleteOptions { DeleteFileLocation = false }, false);
+                ops++;
+            }
+        }
+        return ops;
+    }
+
     public int Apply(Guid seriesId, PlaceholderPlan plan)
     {
         if (_libraryManager.GetItemById(seriesId) is not Series series)

@@ -59,4 +59,46 @@ public static class VirtualEpisodePlanner
         var creates = desired.Where(kv => !keep.Contains(kv.Key)).Select(kv => kv.Value).ToList();
         return new PlaceholderPlan(creates, deletes);
     }
+
+    /// <summary>
+    /// Foreign virtual episodes (created by other writers, no DownloadTime
+    /// marker) that PROVABLY duplicate an owned file: they carry a per-episode
+    /// provider id that identifies exactly one physical episode. Ids shared by
+    /// several physicals prove nothing (split-era misidentification) and the
+    /// marker key is never an episode identity (live phantom analysis
+    /// 2026-08-02: TVDB-plugin aired-season virtuals shadowing merged
+    /// absolute-numbered files).
+    /// </summary>
+    public static IReadOnlyList<Guid> ForeignDuplicates(
+        IReadOnlyList<OwnedEpisode> owned, IReadOnlyList<ForeignPlaceholder> foreign)
+    {
+        static bool IsMarker(string key)
+            => string.Equals(key, VirtualEpisodeWriter.MarkerProviderKey, StringComparison.OrdinalIgnoreCase);
+
+        var counts = new Dictionary<(string Key, string Value), int>();
+        foreach (var o in owned)
+        {
+            foreach (var (k, v) in o.ProviderIds)
+            {
+                if (IsMarker(k) || string.IsNullOrEmpty(v))
+                {
+                    continue;
+                }
+                var key = (k.ToLowerInvariant(), v);
+                counts[key] = counts.TryGetValue(key, out var c) ? c + 1 : 1;
+            }
+        }
+        var unique = counts.Where(kv => kv.Value == 1).Select(kv => kv.Key).ToHashSet();
+
+        var deletes = new List<Guid>();
+        foreach (var f in foreign)
+        {
+            if (f.ProviderIds.Any(kv => !IsMarker(kv.Key) && !string.IsNullOrEmpty(kv.Value)
+                                        && unique.Contains((kv.Key.ToLowerInvariant(), kv.Value))))
+            {
+                deletes.Add(f.ItemId);
+            }
+        }
+        return deletes;
+    }
 }
