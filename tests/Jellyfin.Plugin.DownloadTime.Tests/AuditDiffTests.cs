@@ -225,3 +225,81 @@ public class AuditLaneTests
         Assert.False(Services.Lanes.TvdbScrapeFetcher.InferEnded(Array.Empty<RemoteEpisode>(), now));
     }
 }
+
+/// <summary>Audit D8 (2026-08-03): OVA / TV Special / Web chain entries must
+/// not consume absolute-numbering slots - only "TV Series" entries carry the
+/// regular axis. Live case: Slime's OAD entry (5 type-1 eps) and "Coleus's
+/// Dream" (3 type-1 eps) inflated the union axis, so owned S3 episodes
+/// reported missing as "S6E17-24" for any library without correct eids.</summary>
+public class AuditChainTypeTests
+{
+    private static readonly DateTimeOffset Now = new(2026, 8, 3, 12, 0, 0, TimeSpan.Zero);
+    private static Support.FakeClock Clock() => new(Now);
+    private static DiffOptions Opts(bool specials = false) => new(Now, 24, specials);
+
+    private static string EntryXml(string aid, string type, int count, string prefix) =>
+        $"""
+        <anime id="{aid}" restricted="false">
+          <type>{type}</type>
+          <startdate>2019-01-01</startdate>
+          <enddate>2019-06-01</enddate>
+          <titles><title xml:lang="en" type="main">{type} {aid}</title></titles>
+          <episodes>
+            {string.Join("\n", Enumerable.Range(1, count).Select(i =>
+                $"<episode id=\"{prefix}{i}\"><epno type=\"1\">{i}</epno><airdate>2019-01-{i:00}</airdate></episode>"))}
+          </episodes>
+        </anime>
+        """;
+
+    [Theory]
+    [InlineData("OVA")]
+    [InlineData("TV Special")]
+    [InlineData("Web")]
+    [InlineData("Music Video")]
+    [InlineData("Other")]
+    public void NonSeriesEntryTypes_Type1Episodes_DemotedToSpecials(string type)
+    {
+        var (catalog, _, error) = Services.Lanes.AniDbFetcher.ParseEntry(EntryXml("14526", type, 3, "o"), Clock());
+        Assert.Null(error);
+        Assert.All(catalog!.Episodes, e => Assert.True(e.IsSpecial));
+    }
+
+    [Fact]
+    public void TvSeriesEntry_Type1Episodes_StayRegular()
+    {
+        var (catalog, _, error) = Services.Lanes.AniDbFetcher.ParseEntry(EntryXml("100", "TV Series", 3, "a"), Clock());
+        Assert.Null(error);
+        Assert.All(catalog!.Episodes, e => Assert.False(e.IsSpecial));
+    }
+
+    [Fact]
+    public void SlimeShapedChain_OadEntryDoesNotShiftAxis_NoFalseMissing()
+    {
+        // TV(2) -> OAD(3, type-1 eps) -> TV(2). Id-less merged locals own the
+        // full TV span S1E1..4; the OAD must not inflate the absolute axis.
+        var clock = Clock();
+        var tvA = Services.Lanes.AniDbFetcher.ParseEntry(EntryXml("100", "TV Series", 2, "a"), clock).Catalog!;
+        var oad = Services.Lanes.AniDbFetcher.ParseEntry(EntryXml("14526", "OVA", 3, "o"), clock).Catalog!;
+        var tvB = Services.Lanes.AniDbFetcher.ParseEntry(EntryXml("300", "TV Series", 2, "b"), clock).Catalog!;
+        var union = Services.Lanes.AniDbChain.BuildUnion(new[] { tvA, oad, tvB });
+
+        Assert.Equal(4, union.Episodes.Where(e => !e.IsSpecial).Max(e => e.AbsoluteNumber));
+        Assert.Equal(2, union.Episodes.Single(e => e.SourceEpisodeId == "b1").Season); // OAD consumes no ordinal
+
+        var owned = new[]
+        {
+            new OwnedEpisode(1, 1, null, new Dictionary<string, string>(), null),
+            new OwnedEpisode(1, 2, null, new Dictionary<string, string>(), null),
+            new OwnedEpisode(1, 3, null, new Dictionary<string, string>(), null),
+            new OwnedEpisode(1, 4, null, new Dictionary<string, string>(), null),
+        };
+        Assert.Empty(DiffEngine.Diff(owned, union, Opts()).Missing);         // no episode claims
+        // The OAD items are specials in the union (never regular claims).
+        // Whether they REPORT as missing follows the pinned tuple-OR
+        // semantics (same-ordinal epno collisions are conservatively owned,
+        // see UnionWithSpecial's rationale) — D8 only guarantees the axis.
+        var withSpecials = DiffEngine.Diff(owned, union, Opts(specials: true));
+        Assert.All(withSpecials.Missing, m => Assert.True(m.Episode.IsSpecial));
+        Assert.All(union.Episodes.Where(e => e.SourceEpisodeId!.StartsWith('o')), e => Assert.True(e.IsSpecial));
+    }
+}

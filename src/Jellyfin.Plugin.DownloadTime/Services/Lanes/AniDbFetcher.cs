@@ -135,12 +135,17 @@ public class AniDbFetcher : IAniDbSource
             isEnded = AirTime.FromDate(end.Year, end.Month, end.Day) < clock.UtcNow;
         }
 
-        // Sequel relations sometimes point at Movie entries (a sequel film
-        // between cours). Movies are not episodes: their parts must never
-        // consume absolute-axis slots or entry ordinals in the union, so a
-        // Movie entry's episodes are demoted to specials here (adversarial
-        // audit 2026-07-26).
-        var isMovieEntry = string.Equals(doc.Root.Element("type")?.Value, "Movie", StringComparison.OrdinalIgnoreCase);
+        // Sequel relations sometimes point at non-TV entries: Movies, OVAs,
+        // TV Specials, Web shorts, music videos. None of those are aired
+        // series episodes: their parts must never consume absolute-axis slots
+        // or entry ordinals in the union, or downstream cours shift and owned
+        // episodes read as missing (adversarial audit 2026-07-26; audit D8
+        // 2026-08-03 — Slime's OAD entry inflated the axis by 5). Only
+        // "TV Series" entries carry the regular axis; anything else is
+        // demoted to specials wholesale.
+        var typeValue = doc.Root.Element("type")?.Value?.Trim();
+        var isNonSeriesEntry = typeValue is not null
+            && !string.Equals(typeValue, "TV Series", StringComparison.OrdinalIgnoreCase);
 
         var sequels = new List<string>();
         foreach (var rel in doc.Root.Element("relatedanime")?.Elements("anime") ?? Enumerable.Empty<XElement>())
@@ -190,7 +195,7 @@ public class AniDbFetcher : IAniDbSource
             var title = ep.Elements("title").FirstOrDefault(t => (string?)t.Attribute(XNamespace.Xml + "lang") == "en")?.Value
                         ?? ep.Elements("title").FirstOrDefault()?.Value;
 
-            episodes.Add(new RemoteEpisode(null, number, id, aired, isSpecial || isMovieEntry, title));
+            episodes.Add(new RemoteEpisode(null, number, id, aired, isSpecial || isNonSeriesEntry, title));
         }
 
         // A well-formed entry with no content episodes is legitimate, not a
