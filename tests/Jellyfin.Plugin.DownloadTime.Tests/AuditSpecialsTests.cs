@@ -203,6 +203,49 @@ public class AuditSpecialsTests : IDisposable
         Assert.Empty(DiffEngine.Diff(owned, union, Opts()).Missing);
     }
 
+    // ---------------------------------------------------------------- S-8 --
+
+    private static RemoteCatalog RadioShortUnion() => MovieUnion(
+        new RemoteEpisode(1, 1, "rs1", D(2012, 1, 25), true,
+            "Han Megumi and Ise Mariya's Hunter x Hunter Hunter Studio 1", null, "Hunter x Hunter (2011)"));
+
+    [Fact]
+    public void S0Wildcard_LocalContentContradicts_Vetoed()
+    {
+        // HxH shape: local S0E1 is the movie Phantom Rouge (title+date known);
+        // it must NOT wildcard-claim the radio short that shares number 1 -
+        // both its signals contradict, so the short reports missing.
+        var owned = new[]
+        {
+            new OwnedEpisode(1, 1, null, new Dictionary<string, string> { ["AniDB"] = "r1" }, null),
+            S0(1, "[F] Hunter x Hunter - Phantom Rouge", aired: D(2013, 1, 12)),
+        };
+        var m = Assert.Single(DiffEngine.Diff(owned, RadioShortUnion(), Opts()).Missing);
+        Assert.Equal("rs1", m.Episode.SourceEpisodeId);
+    }
+
+    [Fact]
+    public void S0Wildcard_LocalTitleAgrees_StillOwns()
+    {
+        var owned = new[]
+        {
+            new OwnedEpisode(1, 1, null, new Dictionary<string, string> { ["AniDB"] = "r1" }, null),
+            S0(1, "Han Megumi and Ise Mariya's Hunter x Hunter Hunter Studio 1"),
+        };
+        Assert.Empty(DiffEngine.Diff(owned, RadioShortUnion(), Opts()).Missing);
+    }
+
+    [Fact]
+    public void S0Wildcard_LocalWithoutTitleOrDate_StillOwns()
+    {
+        var owned = new[]
+        {
+            new OwnedEpisode(1, 1, null, new Dictionary<string, string> { ["AniDB"] = "r1" }, null),
+            S0(1, null),
+        };
+        Assert.Empty(DiffEngine.Diff(owned, RadioShortUnion(), Opts()).Missing);
+    }
+
     // ---------------------------------------------------------------- S-6 --
 
     [Fact]

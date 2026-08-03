@@ -139,12 +139,31 @@ public static class DiffEngine
             : new Dictionary<DateTime, int>();
         bool UniqueSpecialDate(RemoteEpisode e)
             => e.AiredAt.HasValue && specialDateCounts.TryGetValue(e.AiredAt.Value.Date, out var c) && c == 1;
+        // The bare-number wildcard is VETOED when the local's own content
+        // contradicts the special: a usable title and/or date that BOTH fail
+        // to match means the file is something else that merely shares the
+        // number (audit S-8: HxH movies at S0E1/E2 vs radio shorts #1/#2).
+        // Locals without any usable signal keep the wildcard (conservative).
+        bool WildcardVetoed(RemoteEpisode e, OwnedEpisode o)
+        {
+            var localTitle = TitleKey(o.Title);
+            if (localTitle is null && !o.AiredAt.HasValue)
+            {
+                return false;
+            }
+            var titleMatches = localTitle is not null
+                && (TitleKey(e.Title) == localTitle || TitleKey(e.EntryName) == localTitle);
+            var dateMatches = e.AiredAt.HasValue && o.AiredAt.HasValue
+                && e.AiredAt.Value.Date == o.AiredAt.Value.Date;
+            return !titleMatches && !dateMatches;
+        }
+
         // Synthesized specials carry an entry ORDINAL, not a season: regular
         // numbering in the same ordinal must never own them (audit S-3) —
         // only the unique-epno S0 wildcard (ids and content match elsewhere).
         bool SeasonAgrees(RemoteEpisode e, OwnedEpisode o)
             => remote.SynthesizedSeasons && e.IsSpecial
-                ? o.Season == 0 && UniqueSpecialEpno(e)
+                ? o.Season == 0 && UniqueSpecialEpno(e) && !WildcardVetoed(e, o)
                 : e.Season is null || !o.Season.HasValue || o.Season == e.Season;
         // Movie/special entry content matching: an owned S0 item with the same
         // air DATE — or the same normalized title (episode OR chain-entry
