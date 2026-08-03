@@ -100,3 +100,6 @@
   .dt-uv-epdate { display: none; }
   .dt-uv-shell { padding: .8em .8em 4em; }
 }
+
+.dt-uv-cs { font-size: .78em; padding: .14em .6em; border-radius: 999px; background: rgba(140, 110, 200, .18); color: #a98ae0; font-variant-numeric: tabular-nums; }
+.dt-uv-k.dt-uv-s { background: rgba(140, 110, 200, .18); color: #a98ae0; }

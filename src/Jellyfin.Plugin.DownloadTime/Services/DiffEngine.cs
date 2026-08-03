@@ -40,8 +40,29 @@ public static class DiffEngine
         }
         if (unreliableIds)
         {
-            notes.Add("Local episode ids are duplicated across files (metadata misidentification) - matching id-bearing episodes by numbering fallback as well.");
+            notes.Add("Local episode ids are duplicated across files (metadata misidentification) - ids are ignored and numbering decides for this series.");
         }
+
+        // Stale upstream ids (audit D2b, 2026-08-03): a file whose id the
+        // catalog no longer knows still occupies its (S,E)/absolute slot.
+        // Only when catalog-VERIFIED locals form the majority — a wrong-tag
+        // library with one lucky match must not numbering-claim everything.
+        var remoteIds = new HashSet<string>(
+            remote.Episodes.Where(e => e.SourceEpisodeId is not null).Select(e => e.SourceEpisodeId!),
+            StringComparer.OrdinalIgnoreCase);
+        var knownIdLocals = 0;
+        var staleIdLocals = 0;
+        if (idKey is not null)
+        {
+            foreach (var o in owned)
+            {
+                if (o.ProviderIds.TryGetValue(idKey, out var id) && !string.IsNullOrEmpty(id))
+                {
+                    if (remoteIds.Contains(id)) { knownIdLocals++; } else { staleIdLocals++; }
+                }
+            }
+        }
+        var staleInclusion = knownIdLocals > staleIdLocals;
 
         foreach (var o in owned)
         {
@@ -50,9 +71,16 @@ public static class DiffEngine
             {
                 ownedIds.Add(o.ProviderIds[idKey!]);
                 // ID-bearing locals match by ID only (spec: tuple fallback is
-                // for id-less locals) — UNLESS the series' ids are provably
-                // unreliable; then their numbering also participates.
-                if (unreliableIds && o.Number.HasValue && (o.Season.HasValue || seasonless))
+                // for id-less locals) — except when numbering must speak too:
+                //  - the series' ids are provably unreliable (duplicates);
+                //  - a multi-episode file: one id can never vouch for the
+                //    whole Covers span (audit D2a);
+                //  - this file's id is stale (unknown to the catalog) while
+                //    verified locals are the majority (audit D2b).
+                var multiEpisode = o.NumberEnd.HasValue && o.Number.HasValue && o.NumberEnd.Value > o.Number.Value;
+                var stale = staleInclusion && !remoteIds.Contains(o.ProviderIds[idKey!]);
+                if ((unreliableIds || multiEpisode || stale)
+                    && o.Number.HasValue && (o.Season.HasValue || seasonless))
                 {
                     tupleOwned.Add(o);
                 }
@@ -93,9 +121,46 @@ public static class DiffEngine
         // Synthesized specials carry Season = entry ordinal, but locals keep
         // specials in season 0 — treat local S0 as a season wildcard for them
         // (v1.2 season-less catalogs matched these; regression guard).
+        // The bare-number wildcard is only proof while UNAMBIGUOUS: with
+        // several chain entries each carrying a special #N, content (airdate)
+        // must decide instead (audit D3, 2026-08-03).
+        var specialEpnoCounts = remote.SynthesizedSeasons
+            ? remote.Episodes.Where(e => e.IsSpecial && e.Number.HasValue)
+                .GroupBy(e => e.Number!.Value).ToDictionary(g => g.Key, g => g.Count())
+            : new Dictionary<int, int>();
+        bool UniqueSpecialEpno(RemoteEpisode e)
+            => e.Number.HasValue && specialEpnoCounts.TryGetValue(e.Number.Value, out var c) && c == 1;
         bool SeasonAgrees(RemoteEpisode e, OwnedEpisode o)
             => e.Season is null || !o.Season.HasValue || o.Season == e.Season
-               || (remote.SynthesizedSeasons && e.IsSpecial && o.Season == 0);
+               || (remote.SynthesizedSeasons && e.IsSpecial && o.Season == 0 && UniqueSpecialEpno(e));
+        // Movie/special entry content matching: an owned S0 item with the same
+        // air DATE — or the same normalized title (episode OR chain-entry
+        // title; movie entries are titled by the film, their sole "episode"
+        // is just "Complete Movie") — is the same content regardless of
+        // numbering or ids (audit D3ii).
+        static string? TitleKey(string? t)
+        {
+            if (string.IsNullOrWhiteSpace(t))
+            {
+                return null;
+            }
+            var key = new string(t.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+            return key.Length == 0 ? null : key;
+        }
+        bool SpecialContentPair(RemoteEpisode e, OwnedEpisode o)
+        {
+            if (!remote.SynthesizedSeasons || !e.IsSpecial || o.Season != 0)
+            {
+                return false;
+            }
+            if (e.AiredAt.HasValue && o.AiredAt.HasValue && e.AiredAt.Value.Date == o.AiredAt.Value.Date)
+            {
+                return true;
+            }
+            var local = TitleKey(o.Title);
+            return local is not null && (TitleKey(e.Title) == local || TitleKey(e.EntryName) == local);
+        }
+        bool SpecialContentMatch(RemoteEpisode e) => owned.Any(o => SpecialContentPair(e, o));
         bool TupleMatch(RemoteEpisode e) => e.Number.HasValue && tupleOwned.Any(o =>
             SeasonAgrees(e, o) && o.Covers(e.Number.Value));
         bool AbsMatch(RemoteEpisode e) => remote.SynthesizedSeasons && e.AbsoluteNumber.HasValue
@@ -116,11 +181,14 @@ public static class DiffEngine
         var fallbackMatched = 0;
         bool IsOwned(RemoteEpisode e)
         {
-            if (IdMatch(e))
+            // Unreliable (duplicated) ids prove nothing in either direction:
+            // a corrupt eid on an owned file must not vouch for an episode
+            // that is genuinely absent (audit D4, 2026-08-03).
+            if (!unreliableIds && IdMatch(e))
             {
                 return true;
             }
-            if (TupleMatch(e) || AbsMatch(e) || CumulativeAbsMatch(e))
+            if (TupleMatch(e) || AbsMatch(e) || CumulativeAbsMatch(e) || SpecialContentMatch(e))
             {
                 fallbackMatched++;
                 return true;
@@ -172,7 +240,8 @@ public static class DiffEngine
             (e.Number.HasValue && SeasonAgrees(e, o) && o.Covers(e.Number.Value))
             || (remote.SynthesizedSeasons && e.AbsoluteNumber.HasValue && o.Covers(e.AbsoluteNumber.Value))
             || (cumulativeAbs is not null && e.Season.HasValue && e.Number.HasValue
-                && cumulativeAbs.TryGetValue((e.Season.Value, e.Number.Value), out var abs) && o.Covers(abs))));
+                && cumulativeAbs.TryGetValue((e.Season.Value, e.Number.Value), out var abs) && o.Covers(abs))
+            || SpecialContentPair(e, o)));
         var stray = strayIds + strayTuples;
         if (stray > 0)
         {

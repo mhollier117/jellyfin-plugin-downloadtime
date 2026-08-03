@@ -18,7 +18,8 @@ public sealed record RemoteEpisode(
     DateTimeOffset? AiredAt,  // normalized (AirTime rule); null = undated
     bool IsSpecial,
     string? Title,
-    int? AbsoluteNumber = null); // cumulative regular-episode position across an AniDB entry chain
+    int? AbsoluteNumber = null,  // cumulative regular-episode position across an AniDB entry chain
+    string? EntryName = null);   // owning chain entry's title (synthesized unions)
 
 /// <summary>Full remote catalog for one series.</summary>
 public sealed record RemoteCatalog(
@@ -27,7 +28,8 @@ public sealed record RemoteCatalog(
     string SeriesSourceId,
     bool IsEnded,             // drives cache TTL
     IReadOnlyList<RemoteEpisode> Episodes,
-    bool SynthesizedSeasons = false); // true when Season is an AniDB entry ordinal, NOT a trustworthy local season
+    bool SynthesizedSeasons = false, // true when Season is an AniDB entry ordinal, NOT a trustworthy local season
+    string? Name = null);            // source-side series/entry title where known
 
 /// <summary>Exactly one of Catalog/Error is non-null.</summary>
 public sealed record FetchOutcome(RemoteCatalog? Catalog, string? Error)
@@ -43,7 +45,8 @@ public sealed record OwnedEpisode(
     int? Number,              // IndexNumber
     int? NumberEnd,           // IndexNumberEnd (multi-episode files)
     IReadOnlyDictionary<string, string> ProviderIds,
-    DateTimeOffset? AiredAt)
+    DateTimeOffset? AiredAt,
+    string? Title = null)     // display name (movie/special content matching)
 {
     public bool Covers(int n) => Number.HasValue && n >= Number.Value && n <= (NumberEnd ?? Number.Value);
 }

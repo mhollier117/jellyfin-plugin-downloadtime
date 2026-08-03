@@ -126,6 +126,9 @@ public class AniDbFetcher : IAniDbSource
         }
 
         var seriesId = doc.Root.Attribute("id")?.Value ?? string.Empty;
+        var mainTitle = doc.Root.Element("titles")?.Elements("title")
+            .FirstOrDefault(t => string.Equals(t.Attribute("type")?.Value, "main", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? doc.Root.Element("titles")?.Elements("title").FirstOrDefault()?.Value;
         var isEnded = false;
         if (DateOnly.TryParse(doc.Root.Element("enddate")?.Value, out var end))
         {
@@ -196,6 +199,6 @@ public class AniDbFetcher : IAniDbSource
         // 2026-07-26 against aid 17896 / 19433. It contributes nothing to the
         // union; the caller's fail-safe still catches an empty ROOT entry for
         // a series that has local files.
-        return (new RemoteCatalog("AniDB", "AniDB", seriesId, isEnded, episodes), sequels, null);
+        return (new RemoteCatalog("AniDB", "AniDB", seriesId, isEnded, episodes, Name: mainTitle), sequels, null);
     }
 }

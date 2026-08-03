@@ -60,7 +60,8 @@ public partial class TvdbScrapeFetcher : ITvdbSource
             {
                 return FetchOutcome.Fail(error);
             }
-            return FetchOutcome.Ok(new RemoteCatalog("Tvdb", "Tvdb", tvdbId, IsEnded: false, episodes!));
+            return FetchOutcome.Ok(new RemoteCatalog(
+                "Tvdb", "Tvdb", tvdbId, IsEnded: InferEnded(episodes!, DateTimeOffset.UtcNow), episodes!));
         }
         catch (HttpRequestException ex)
         {
@@ -81,6 +82,21 @@ public partial class TvdbScrapeFetcher : ITvdbSource
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.UserAgent.ParseAdd(UserAgent);
         return await _http.SendAsync(req, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Ended inference (audit D7): the page carries no status, but a show
+    /// whose regular episodes are all dated and last aired long ago is ended
+    /// for caching purposes (7-day TTL instead of daily refetch).
+    /// </summary>
+    public static bool InferEnded(IReadOnlyList<RemoteEpisode> episodes, DateTimeOffset now)
+    {
+        var regulars = episodes.Where(e => e.Season is not 0 && !e.IsSpecial).ToList();
+        if (regulars.Count == 0 || regulars.Any(e => !e.AiredAt.HasValue))
+        {
+            return false; // undated rows may be scheduled future episodes
+        }
+        return regulars.Max(e => e.AiredAt!.Value) < now.AddDays(-120);
     }
 
     /// <summary>Pure parser. Returns (episodes, null) or (null, error). An empty

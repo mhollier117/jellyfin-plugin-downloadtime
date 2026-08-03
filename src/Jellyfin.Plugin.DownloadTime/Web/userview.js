@@ -31,9 +31,9 @@
         return o === undefined ? !!s.Muted : o;
     }
     function counts(s) {
-        var g = 0, n = 0;
-        (s.Missing || []).forEach(function (m) { if (m.Kind === 'New') { n++; } else { g++; } });
-        return { g: g, n: n, t: g + n };
+        var g = 0, n = 0, sp = 0;
+        (s.Missing || []).forEach(function (m) { if (m.IsSpecial) { sp++; } else if (m.Kind === 'New') { n++; } else { g++; } });
+        return { g: g, n: n, sp: sp, t: g + n + sp };
     }
     function newestAir(s) {
         var best = 0;
@@ -103,13 +103,13 @@
 
     /* ---------- render ---------- */
     function totals() {
-        var t = { shows: 0, gaps: 0, news: 0, movies: 0 };
+        var t = { shows: 0, gaps: 0, news: 0, specials: 0, movies: 0 };
         var r = state.report || {};
         (r.Series || []).forEach(function (s) {
             if (isMuted(s)) return;
             var c = counts(s);
             if (c.t > 0) t.shows++;
-            t.gaps += c.g; t.news += c.n;
+            t.gaps += c.g; t.news += c.n; t.specials += c.sp;
         });
         (r.Collections || []).forEach(function (c) { t.movies += (c.Missing || []).length; });
         return t;
@@ -132,6 +132,7 @@
             { k: 'all', cls: '', n: t.shows, l: 'Shows with missing' },
             { k: 'gaps', cls: 'dt-uv-t-gap', n: t.gaps, l: 'Gaps' },
             { k: 'new', cls: 'dt-uv-t-new', n: t.news, l: 'New episodes' },
+            { k: 'specials', cls: '', n: t.specials, l: 'Missing specials' },
             { k: 'movies', cls: '', n: t.movies, l: 'Missing movies' }
         ];
         overlay.querySelector('#dtUvTiles').innerHTML = defs.map(function (d) {
@@ -143,6 +144,7 @@
     function renderChips() {
         var defs = [
             { k: 'all', l: 'All' }, { k: 'gaps', l: 'Gaps only' }, { k: 'new', l: 'New only' },
+            { k: 'specials', l: 'Specials' },
             { k: 'movies', l: 'Movies' }, { k: 'errors', l: 'Errors' }
         ];
         if (state.isAdmin) defs.push({ k: 'muted', l: 'Muted' });
@@ -154,22 +156,29 @@
     var EP_PREVIEW = 50;
 
     function epRow(m) {
-        var code = 'S' + String(m.Season == null ? '?' : m.Season).padStart(2, '0') + 'E' + String(m.Number == null ? '?' : m.Number).padStart(2, '0');
+        var code = m.EntryName
+            ? (m.IsSpecial ? m.EntryName : m.EntryName + ' E' + String(m.Number == null ? '?' : m.Number).padStart(2, '0')
+                + (m.AbsoluteNumber != null ? ' \u00b7 abs ' + m.AbsoluteNumber : ''))
+            : 'S' + String(m.Season == null ? '?' : m.Season).padStart(2, '0') + 'E' + String(m.Number == null ? '?' : m.Number).padStart(2, '0');
+        var kind = m.IsSpecial ? '<span class="dt-uv-k dt-uv-s">Special</span>'
+            : '<span class="dt-uv-k ' + (m.Kind === 'New' ? 'dt-uv-n' : 'dt-uv-g') + '">' + (m.Kind === 'New' ? 'New' : 'Gap') + '</span>';
         return '<div class="dt-uv-ep"><span class="dt-uv-code">' + esc(code) + '</span>'
             + '<span class="dt-uv-eptitle">' + esc(m.Title || '') + '</span>'
             + (m.AiredAt ? '<span class="dt-uv-epdate">aired ' + esc(fmtDate(m.AiredAt)) + '</span>' : '')
-            + '<span class="dt-uv-k ' + (m.Kind === 'New' ? 'dt-uv-n' : 'dt-uv-g') + '">' + (m.Kind === 'New' ? 'New' : 'Gap') + '</span></div>';
+            + kind + '</div>';
     }
 
     function epList(list) {
         var html = '', bySeason = {}, order = [];
         list.forEach(function (m) {
-            var k = (m.Season == null ? '?' : m.Season);
+            var k = m.EntryName ? 'entry:' + m.EntryName : (m.Season == null ? '?' : m.Season);
             if (!bySeason[k]) { bySeason[k] = []; order.push(k); }
             bySeason[k].push(m);
         });
         order.forEach(function (k) {
-            html += '<div class="dt-uv-season">' + (k === '?' ? 'Unknown season' : (k === 0 || k === '0' ? 'Specials' : 'Season ' + k)) + '</div>';
+            var label = (typeof k === 'string' && k.indexOf('entry:') === 0) ? esc(k.slice(6))
+                : (k === '?' ? 'Unknown season' : (k === 0 || k === '0' ? 'Specials' : 'Season ' + k));
+            html += '<div class="dt-uv-season">' + label + '</div>';
             html += bySeason[k].map(epRow).join('');
         });
         return html;
@@ -177,8 +186,9 @@
 
     function filteredEps(s) {
         var eps = s.Missing || [];
-        if (state.filter === 'gaps') eps = eps.filter(function (m) { return m.Kind !== 'New'; });
-        if (state.filter === 'new') eps = eps.filter(function (m) { return m.Kind === 'New'; });
+        if (state.filter === 'gaps') eps = eps.filter(function (m) { return m.Kind !== 'New' && !m.IsSpecial; });
+        if (state.filter === 'new') eps = eps.filter(function (m) { return m.Kind === 'New' && !m.IsSpecial; });
+        if (state.filter === 'specials') eps = eps.filter(function (m) { return !!m.IsSpecial; });
         return eps;
     }
 
@@ -193,7 +203,8 @@
         var pills = '<span class="dt-uv-pill">' + esc(s.Lane || '?') + (s.UsedFallback ? ' &#183; fallback' : '') + '</span>'
             + (s.Error ? '<span class="dt-uv-pill dt-uv-warn">error</span>' : '');
         var chips = (c.g ? '<span class="dt-uv-cg">' + num(c.g) + ' gap' + (c.g === 1 ? '' : 's') + '</span>' : '')
-            + (c.n ? '<span class="dt-uv-cn">' + num(c.n) + ' new</span>' : '');
+            + (c.n ? '<span class="dt-uv-cn">' + num(c.n) + ' new</span>' : '')
+            + (c.sp ? '<span class="dt-uv-cs">' + num(c.sp) + ' special' + (c.sp === 1 ? '' : 's') + '</span>' : '');
         var muteBtn = state.isAdmin
             ? '<button type="button" class="dt-uv-ibtn" data-uvact="' + (muted ? 'unmute' : 'mute') + '" data-uvid="' + nId + '" title="' + (muted ? 'Unmute' : 'Mute') + ' ' + esc(s.Name) + '">' + (muted ? '&#128266;' : '&#128263;') + '</button>'
             : '';
@@ -256,6 +267,7 @@
                 if (!matchesSearch(s.Name)) return false;
                 if (f === 'gaps') return c.g > 0;
                 if (f === 'new') return c.n > 0;
+                if (f === 'specials') return c.sp > 0;
                 return c.t > 0;
             });
             sortSeries(shows);

@@ -36,17 +36,18 @@ public static class AniDbChain
                 ordinal++;
             }
             var season = Math.Max(1, ordinal);
+            var entryName = entries[i].Name ?? entries[i].SeriesSourceId;
             // regular episodes in epno order define the absolute sequence
             foreach (var ep in entries[i].Episodes.OrderBy(e => e.IsSpecial ? 1 : 0).ThenBy(e => e.Number ?? int.MaxValue))
             {
                 if (ep.IsSpecial)
                 {
-                    episodes.Add(ep with { Season = season, AbsoluteNumber = null });
+                    episodes.Add(ep with { Season = season, AbsoluteNumber = null, EntryName = entryName });
                 }
                 else
                 {
                     absolute++;
-                    episodes.Add(ep with { Season = season, AbsoluteNumber = absolute });
+                    episodes.Add(ep with { Season = season, AbsoluteNumber = absolute, EntryName = entryName });
                 }
             }
         }

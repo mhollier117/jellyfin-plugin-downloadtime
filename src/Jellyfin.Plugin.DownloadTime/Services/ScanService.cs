@@ -57,10 +57,66 @@ public class ScanService
             var totalUnits = Math.Max(1, allSeries.Count + 1);
             var done = 0;
 
+            // AniDB roots across the library: chain expansion must stop at
+            // another series' root, or one report swallows the franchise
+            // (audit D1, 2026-08-03).
+            var routes = new Dictionary<Guid, RouteDecision>();
+            var anidbRoots = new Dictionary<Guid, string>();
+            foreach (var series in allSeries)
+            {
+                var route = SourceRouter.Route(series.Path, series.IsAnimeLibrary, series.ProviderIds);
+                routes[series.Id] = route;
+                if (route.Kind == SourceKind.AniDbId)
+                {
+                    anidbRoots[series.Id] = route.SourceId;
+                }
+            }
+            var rootSet = new HashSet<string>(anidbRoots.Values, StringComparer.OrdinalIgnoreCase);
+
+            // Phase 1: resolve every eligible series' entry chain (fetch+cache).
+            var chains = new Dictionary<Guid, ChainResult>();
+            if (settings.EnableAnimeLane)
+            {
+                foreach (var series in allSeries)
+                {
+                    if (!anidbRoots.TryGetValue(series.Id, out var root)
+                        || settings.ExcludedItemIds.Contains(series.Id.ToString("N")))
+                    {
+                        continue;
+                    }
+                    ct.ThrowIfCancellationRequested();
+                    chains[series.Id] = await FetchChainAsync(root, rootSet, settings, fullRefresh, ct).ConfigureAwait(false);
+                }
+            }
+
+            // Phase 2: attribute each chain entry to the series whose root is
+            // nearest (ties: lower root aid) — shared movie/special entries
+            // are reported at most once (audit D3i).
+            var entryOwner = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            var bestClaim = new Dictionary<string, (int Dist, string Root)>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (seriesId, chain) in chains)
+            {
+                if (chain.Error is not null)
+                {
+                    continue;
+                }
+                var root = anidbRoots[seriesId];
+                foreach (var e in chain.Entries)
+                {
+                    if (!bestClaim.TryGetValue(e.Aid, out var cur)
+                        || e.Distance < cur.Dist
+                        || (e.Distance == cur.Dist && string.CompareOrdinal(root, cur.Root) < 0))
+                    {
+                        bestClaim[e.Aid] = (e.Distance, root);
+                        entryOwner[e.Aid] = seriesId;
+                    }
+                }
+            }
+
             foreach (var series in allSeries)
             {
                 ct.ThrowIfCancellationRequested();
-                seriesReports.Add(await ScanSeriesAsync(series, settings, fullRefresh, diffs, ct).ConfigureAwait(false));
+                seriesReports.Add(await ScanSeriesAsync(series, routes[series.Id], chains, entryOwner, settings, fullRefresh, diffs, ct).ConfigureAwait(false));
                 progress?.Report(100.0 * ++done / totalUnits);
             }
 
@@ -79,10 +135,11 @@ public class ScanService
     }
 
     private async Task<SeriesReportDto> ScanSeriesAsync(
-        SeriesItemInfo series, ScanSettings settings, bool fullRefresh,
+        SeriesItemInfo series, RouteDecision route,
+        IReadOnlyDictionary<Guid, ChainResult> chains, IReadOnlyDictionary<string, Guid> entryOwner,
+        ScanSettings settings, bool fullRefresh,
         Dictionary<Guid, (SeriesDiff, RemoteCatalog)> diffs, CancellationToken ct)
     {
-        var route = SourceRouter.Route(series.Path, series.IsAnimeLibrary, series.ProviderIds);
         var lane = route.Kind switch
         {
             SourceKind.TvdbId => "Tvdb",
@@ -123,15 +180,30 @@ public class ScanService
         {
             if (route.Kind == SourceKind.AniDbId)
             {
-                // Anime: walk the AniDB Sequel chain and diff against the union
-                // (analysis 2026-07-26 — merged AND split local layouts).
-                var (unionCatalog, entryCount, chainError) =
-                    await FetchAniDbUnionAsync(route.SourceId, settings, fullRefresh, chainNotes, ct).ConfigureAwait(false);
-                catalog = unionCatalog;
-                error = chainError;
-                if (entryCount > 1)
+                // Anime: diff against the union of this series' resolved entry
+                // chain (analysis 2026-07-26 — merged AND split local layouts).
+                // Chains were fetched up front; entries stop at other series'
+                // roots (audit D1) and specials-only entries reachable from
+                // several series belong to the nearest root only (audit D3i).
+                if (!chains.TryGetValue(series.Id, out var chain))
                 {
-                    lane = $"AniDB ({entryCount} entries)";
+                    return Report("AniDB chain was not resolved for this series.");
+                }
+                if (chain.Error is not null)
+                {
+                    return Report(chain.Error);
+                }
+                chainNotes.AddRange(chain.Notes);
+                var included = chain.Entries
+                    .Where(e => e.Distance == 0
+                                || e.Item.Catalog.Episodes.Any(ep => !ep.IsSpecial)
+                                || (entryOwner.TryGetValue(e.Aid, out var owner) && owner == series.Id))
+                    .Select(e => e.Item.Catalog)
+                    .ToList();
+                catalog = AniDbChain.BuildUnion(included);
+                if (included.Count > 1)
+                {
+                    lane = $"AniDB ({included.Count} entries)";
                 }
             }
             else
@@ -192,32 +264,47 @@ public class ScanService
         diffs[series.Id] = (diff, catalog);
         var missing = diff.Missing
             .Select(m => new MissingEpisodeDto(m.Episode.Season, m.Episode.Number, m.Episode.Title,
-                                               m.Episode.AiredAt, m.Kind.ToString(), m.Episode.SourceEpisodeId))
+                                               m.Episode.AiredAt, m.Kind.ToString(), m.Episode.SourceEpisodeId,
+                                               m.Episode.IsSpecial, m.Episode.EntryName, m.Episode.AbsoluteNumber))
             .ToList();
         var allNotes = chainNotes.Count == 0 ? diff.Notes : chainNotes.Concat(diff.Notes).ToList();
         return Report(null, usedFallback, notes: allNotes, missing: missing);
     }
 
+    private sealed record ChainEntry(string Aid, AniDbEntryCacheItem Item, int Distance);
+
+    private sealed record ChainResult(IReadOnlyList<ChainEntry> Entries, IReadOnlyList<string> Notes, string? Error)
+    {
+        public static ChainResult Fail(string error) => new(Array.Empty<ChainEntry>(), Array.Empty<string>(), error);
+    }
+
     /// <summary>
     /// Walks the AniDB Sequel chain from the identified entry (BFS, cycle
-    /// guard, capped at AniDbChain.MaxEntries) and returns the union catalog.
-    /// Each entry is cached individually; sequel fetch failures degrade to a
-    /// partial union with a note — only a failed ROOT entry errors the series.
+    /// guard, capped at AniDbChain.MaxEntries). Expansion STOPS at any aid
+    /// that is another library series' root (audit D1) — that content is
+    /// tracked under its own series. Each entry is cached individually;
+    /// sequel fetch failures degrade to a partial chain with a note — only a
+    /// failed ROOT entry errors the series.
     /// </summary>
-    private async Task<(RemoteCatalog? Catalog, int EntryCount, string? Error)> FetchAniDbUnionAsync(
-        string rootAid, ScanSettings settings, bool fullRefresh, List<string> notes, CancellationToken ct)
+    private async Task<ChainResult> FetchChainAsync(
+        string rootAid, IReadOnlySet<string> allRoots, ScanSettings settings, bool fullRefresh, CancellationToken ct)
     {
-        var entries = new List<RemoteCatalog>();
-        var queue = new Queue<string>();
+        var notes = new List<string>();
+        var entries = new List<ChainEntry>();
+        var queue = new Queue<(string Aid, int Distance)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        queue.Enqueue(rootAid);
+        queue.Enqueue((rootAid, 0));
 
         while (queue.Count > 0 && entries.Count < AniDbChain.MaxEntries)
         {
-            var aid = queue.Dequeue();
+            var (aid, distance) = queue.Dequeue();
             if (!seen.Add(aid))
             {
                 continue;
+            }
+            if (distance > 0 && allRoots.Contains(aid))
+            {
+                continue; // another series' root: its content is its own report
             }
 
             var key = $"anidb-entry-{aid}";
@@ -235,7 +322,7 @@ public class ScanService
                 {
                     if (entries.Count == 0)
                     {
-                        return (null, 0, outcome.Error ?? "AniDB fetch failed");
+                        return ChainResult.Fail(outcome.Error ?? "AniDB fetch failed");
                     }
                     notes.Add($"AniDB entry {aid} fetch failed ({outcome.Error}) - missing detection for its episodes is partial this scan.");
                     continue;
@@ -244,14 +331,14 @@ public class ScanService
                 _cache.Store(key, item);
             }
 
-            entries.Add(item.Catalog);
+            entries.Add(new ChainEntry(aid, item, distance));
             foreach (var sequel in item.SequelIds)
             {
-                queue.Enqueue(sequel);
+                queue.Enqueue((sequel, distance + 1));
             }
         }
 
-        return (AniDbChain.BuildUnion(entries), entries.Count, null);
+        return new ChainResult(entries, notes, null);
     }
 
     private async Task<List<CollectionReportDto>> ScanMoviesAsync(

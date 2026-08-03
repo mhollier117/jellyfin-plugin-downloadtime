@@ -62,6 +62,7 @@
 #DownloadTimeReportPage .dtr-pill.warn { background: rgba(204,92,92,.16); color: var(--dt-red); }
 #DownloadTimeReportPage .dtr-chipG { font-size: .78em; padding: .14em .6em; border-radius: 999px; background: var(--dt-steel-soft); color: var(--dt-steel); font-variant-numeric: tabular-nums; }
 #DownloadTimeReportPage .dtr-chipN { font-size: .78em; padding: .14em .6em; border-radius: 999px; background: var(--dt-amber-soft); color: var(--dt-amber); font-variant-numeric: tabular-nums; }
+#DownloadTimeReportPage .dtr-chipS { font-size: .78em; padding: .14em .6em; border-radius: 999px; background: rgba(140, 110, 200, .18); color: #a98ae0; font-variant-numeric: tabular-nums; }
 #DownloadTimeReportPage .dtr-ctl { display: flex; align-items: center; gap: .15em; flex: 0 0 auto; }
 #DownloadTimeReportPage .dtr-ibtn { font: inherit; background: none; border: none; color: var(--dt-dimmer); cursor: pointer; padding: .35em .45em; border-radius: 5px; font-size: 1.05em; line-height: 1; }
 #DownloadTimeReportPage .dtr-ibtn:hover { color: inherit; background: rgba(255,255,255,.08); }
@@ -80,6 +81,7 @@
 #DownloadTimeReportPage .dtr-k { font-size: .7em; padding: .1em .5em; border-radius: 999px; flex: 0 0 auto; }
 #DownloadTimeReportPage .dtr-k.g { background: var(--dt-steel-soft); color: var(--dt-steel); }
 #DownloadTimeReportPage .dtr-k.n { background: var(--dt-amber-soft); color: var(--dt-amber); }
+#DownloadTimeReportPage .dtr-k.s { background: rgba(140, 110, 200, .18); color: #a98ae0; }
 #DownloadTimeReportPage .dtr-more { margin: .5em 0 0; font-size: .85em; color: var(--dt-amber); background: none; border: 1px solid var(--dt-amber-soft); border-radius: 5px; padding: .35em .9em; cursor: pointer; }
 #DownloadTimeReportPage .dtr-more:hover { background: var(--dt-amber-soft); }
 #DownloadTimeReportPage .dtr-note { color: var(--dt-dimmer); font-size: .85em; margin-top: .5em; font-style: italic; }
@@ -172,9 +174,9 @@
         return o === undefined ? !!s.Muted : o;
     }
     function counts(s) {
-        var g = 0, n = 0;
-        (s.Missing || []).forEach(function (m) { if (m.Kind === 'New') { n++; } else { g++; } });
-        return { g: g, n: n, t: g + n };
+        var g = 0, n = 0, sp = 0;
+        (s.Missing || []).forEach(function (m) { if (m.IsSpecial) { sp++; } else if (m.Kind === 'New') { n++; } else { g++; } });
+        return { g: g, n: n, sp: sp, t: g + n + sp };
     }
     function newestAir(s) {
         var best = 0;
@@ -198,13 +200,13 @@
     }
 
     function totals() {
-        var t = { shows: 0, gaps: 0, news: 0, movies: 0 };
+        var t = { shows: 0, gaps: 0, news: 0, specials: 0, movies: 0 };
         var r = state.report || {};
         (r.Series || []).forEach(function (s) {
             if (isMuted(s)) return;
             var c = counts(s);
             if (c.t > 0) t.shows++;
-            t.gaps += c.g; t.news += c.n;
+            t.gaps += c.g; t.news += c.n; t.specials += c.sp;
         });
         (r.Collections || []).forEach(function (c) { t.movies += (c.Missing || []).length; });
         return t;
@@ -216,6 +218,7 @@
             { k: 'all', cls: '', n: t.shows, l: 'Shows with missing' },
             { k: 'gaps', cls: 't-gap', n: t.gaps, l: 'Gaps' },
             { k: 'new', cls: 't-new', n: t.news, l: 'New episodes' },
+            { k: 'specials', cls: '', n: t.specials, l: 'Missing specials' },
             { k: 'movies', cls: '', n: t.movies, l: 'Missing movies' }
         ];
         page.querySelector('#dtrTiles').innerHTML = defs.map(function (d) {
@@ -227,6 +230,7 @@
     function renderChips() {
         var defs = [
             { k: 'all', l: 'All' }, { k: 'gaps', l: 'Gaps only' }, { k: 'new', l: 'New only' },
+            { k: 'specials', l: 'Specials' },
             { k: 'movies', l: 'Movies' }, { k: 'errors', l: 'Errors' }, { k: 'muted', l: 'Muted' }
         ];
         page.querySelector('#dtrChips').innerHTML = defs.map(function (d) {
@@ -238,11 +242,16 @@
     var EP_PREVIEW = 50;
 
     function epRow(m) {
-        var code = 'S' + String(m.Season == null ? '?' : m.Season).padStart(2, '0') + 'E' + String(m.Number == null ? '?' : m.Number).padStart(2, '0');
+        var code = m.EntryName
+            ? (m.IsSpecial ? m.EntryName : m.EntryName + ' E' + String(m.Number == null ? '?' : m.Number).padStart(2, '0')
+                + (m.AbsoluteNumber != null ? ' · abs ' + m.AbsoluteNumber : ''))
+            : 'S' + String(m.Season == null ? '?' : m.Season).padStart(2, '0') + 'E' + String(m.Number == null ? '?' : m.Number).padStart(2, '0');
+        var kind = m.IsSpecial ? '<span class="dtr-k s">Special</span>'
+            : '<span class="dtr-k ' + (m.Kind === 'New' ? 'n' : 'g') + '">' + (m.Kind === 'New' ? 'New' : 'Gap') + '</span>';
         return '<div class="dtr-ep"><span class="dtr-code">' + esc(code) + '</span>'
             + '<span class="dtr-eptitle">' + esc(m.Title || '') + '</span>'
             + (m.AiredAt ? '<span class="dtr-epdate">aired ' + esc(fmtDate(m.AiredAt)) + '</span>' : '')
-            + '<span class="dtr-k ' + (m.Kind === 'New' ? 'n' : 'g') + '">' + (m.Kind === 'New' ? 'New' : 'Gap') + '</span></div>';
+            + kind + '</div>';
     }
 
     function epList(list) {
@@ -250,12 +259,14 @@
         var bySeason = {};
         var order = [];
         list.forEach(function (m) {
-            var k = (m.Season == null ? '?' : m.Season);
+            var k = m.EntryName ? 'entry:' + m.EntryName : (m.Season == null ? '?' : m.Season);
             if (!bySeason[k]) { bySeason[k] = []; order.push(k); }
             bySeason[k].push(m);
         });
         order.forEach(function (k) {
-            html += '<div class="dtr-season">' + (k === '?' ? 'Unknown season' : (k === 0 || k === '0' ? 'Specials' : 'Season ' + k)) + '</div>';
+            var label = (typeof k === 'string' && k.indexOf('entry:') === 0) ? esc(k.slice(6))
+                : (k === '?' ? 'Unknown season' : (k === 0 || k === '0' ? 'Specials' : 'Season ' + k));
+            html += '<div class="dtr-season">' + label + '</div>';
             html += bySeason[k].map(epRow).join('');
         });
         return html;
@@ -263,8 +274,9 @@
 
     function filteredEps(s) {
         var eps = s.Missing || [];
-        if (state.filter === 'gaps') eps = eps.filter(function (m) { return m.Kind !== 'New'; });
-        if (state.filter === 'new') eps = eps.filter(function (m) { return m.Kind === 'New'; });
+        if (state.filter === 'gaps') eps = eps.filter(function (m) { return m.Kind !== 'New' && !m.IsSpecial; });
+        if (state.filter === 'new') eps = eps.filter(function (m) { return m.Kind === 'New' && !m.IsSpecial; });
+        if (state.filter === 'specials') eps = eps.filter(function (m) { return !!m.IsSpecial; });
         return eps;
     }
 
@@ -278,7 +290,8 @@
         var pills = '<span class="dtr-pill">' + esc(s.Lane || '?') + (s.UsedFallback ? ' &#183; fallback' : '') + '</span>'
             + (s.Error ? '<span class="dtr-pill warn">error</span>' : '');
         var chips = (c.g ? '<span class="dtr-chipG">' + num(c.g) + ' gap' + (c.g === 1 ? '' : 's') + '</span>' : '')
-            + (c.n ? '<span class="dtr-chipN">' + num(c.n) + ' new</span>' : '');
+            + (c.n ? '<span class="dtr-chipN">' + num(c.n) + ' new</span>' : '')
+            + (c.sp ? '<span class="dtr-chipS">' + num(c.sp) + ' special' + (c.sp === 1 ? '' : 's') + '</span>' : '');
         var preview = eps.slice(0, EP_PREVIEW);
         var detail = epList(preview)
             + (eps.length > EP_PREVIEW ? '<button type="button" class="dtr-more" data-act="showall" data-id="' + nId + '">Show all ' + num(eps.length) + ' episodes</button>' : '')
@@ -342,6 +355,7 @@
                 if (!matchesSearch(s.Name)) return false;
                 if (f === 'gaps') return c.g > 0;
                 if (f === 'new') return c.n > 0;
+                if (f === 'specials') return c.sp > 0;
                 return c.t > 0;
             });
             sortSeries(shows);

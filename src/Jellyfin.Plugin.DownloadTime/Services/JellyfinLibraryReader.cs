@@ -38,7 +38,8 @@ public class JellyfinLibraryReader : ILibraryReader
                 owned.Add(new OwnedEpisode(
                     e.ParentIndexNumber, e.IndexNumber, e.IndexNumberEnd,
                     new Dictionary<string, string>(e.ProviderIds, StringComparer.OrdinalIgnoreCase),
-                    e.PremiereDate.HasValue ? new DateTimeOffset(e.PremiereDate.Value, TimeSpan.Zero) : null));
+                    e.PremiereDate.HasValue ? new DateTimeOffset(e.PremiereDate.Value, TimeSpan.Zero) : null,
+                    e.Name));
             }
             var providerIds = new Dictionary<string, string>(s.ProviderIds, StringComparer.OrdinalIgnoreCase);
             result.Add(new SeriesItemInfo(s.Id, s.Name, s.Path ?? string.Empty,
