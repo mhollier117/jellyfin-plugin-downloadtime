@@ -414,8 +414,12 @@ public class AdversarialAnimeTests : IDisposable
     }
 
     [Fact]
-    public void H_LegacyRemoteCatalogJson_MissingNewMembers_DeserializesWithDefaults()
+    public void H_LegacyRemoteCatalogJson_PreSchemaVersion_IsCacheMiss()
     {
+        // Since audit S-1 (2026-08-03) cached payloads carry a SchemaVersion;
+        // envelopes written by older code (no version field) are MISSES so
+        // stale parsing semantics self-heal by refetching, never by being
+        // reinterpreted with defaulted members.
         var clock = new FakeClock(Now);
         var cache = new CatalogCache(_dir, clock);
         var legacy = """
@@ -423,12 +427,7 @@ public class AdversarialAnimeTests : IDisposable
             """;
         File.WriteAllText(Path.Combine(_dir, "legacy-cat.json"), legacy);
 
-        var cat = cache.TryGet<RemoteCatalog>("legacy-cat", TimeSpan.FromDays(7));
-        Assert.NotNull(cat);
-        Assert.False(cat!.SynthesizedSeasons);           // defaulted, not garbage
-        var ep = Assert.Single(cat.Episodes);
-        Assert.Null(ep.AbsoluteNumber);                  // defaulted
-        Assert.Equal("274088", ep.SourceEpisodeId);
+        Assert.Null(cache.TryGet<RemoteCatalog>("legacy-cat", TimeSpan.FromDays(7)));
     }
 
     // ---------------------------------------------------------------- (i) --

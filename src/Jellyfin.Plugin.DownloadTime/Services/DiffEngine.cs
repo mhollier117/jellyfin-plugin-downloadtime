@@ -130,9 +130,22 @@ public static class DiffEngine
             : new Dictionary<int, int>();
         bool UniqueSpecialEpno(RemoteEpisode e)
             => e.Number.HasValue && specialEpnoCounts.TryGetValue(e.Number.Value, out var c) && c == 1;
+        // Same-day sibling specials (a movie plus its bonus short) make bare
+        // date equality ambiguous — a date only proves ownership when it is
+        // unique among the union's specials (audit S-7).
+        var specialDateCounts = remote.SynthesizedSeasons
+            ? remote.Episodes.Where(e => e.IsSpecial && e.AiredAt.HasValue)
+                .GroupBy(e => e.AiredAt!.Value.Date).ToDictionary(g => g.Key, g => g.Count())
+            : new Dictionary<DateTime, int>();
+        bool UniqueSpecialDate(RemoteEpisode e)
+            => e.AiredAt.HasValue && specialDateCounts.TryGetValue(e.AiredAt.Value.Date, out var c) && c == 1;
+        // Synthesized specials carry an entry ORDINAL, not a season: regular
+        // numbering in the same ordinal must never own them (audit S-3) —
+        // only the unique-epno S0 wildcard (ids and content match elsewhere).
         bool SeasonAgrees(RemoteEpisode e, OwnedEpisode o)
-            => e.Season is null || !o.Season.HasValue || o.Season == e.Season
-               || (remote.SynthesizedSeasons && e.IsSpecial && o.Season == 0 && UniqueSpecialEpno(e));
+            => remote.SynthesizedSeasons && e.IsSpecial
+                ? o.Season == 0 && UniqueSpecialEpno(e)
+                : e.Season is null || !o.Season.HasValue || o.Season == e.Season;
         // Movie/special entry content matching: an owned S0 item with the same
         // air DATE — or the same normalized title (episode OR chain-entry
         // title; movie entries are titled by the film, their sole "episode"
@@ -144,7 +157,20 @@ public static class DiffEngine
             {
                 return null;
             }
-            var key = new string(t.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+            // Strip LEADING bracketed marker groups only ("[C] ", "[C/F] ",
+            // "[AC] [F] " — AFM canon/filler prefixes; audit S-2). Interior
+            // brackets stay part of the title.
+            var s = t.AsSpan().Trim();
+            while (s.Length > 0 && s[0] == '[')
+            {
+                var close = s.IndexOf(']');
+                if (close < 0)
+                {
+                    break;
+                }
+                s = s[(close + 1)..].TrimStart();
+            }
+            var key = new string(s.ToArray().Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
             return key.Length == 0 ? null : key;
         }
         bool SpecialContentPair(RemoteEpisode e, OwnedEpisode o)
@@ -153,12 +179,24 @@ public static class DiffEngine
             {
                 return false;
             }
-            if (e.AiredAt.HasValue && o.AiredAt.HasValue && e.AiredAt.Value.Date == o.AiredAt.Value.Date)
+            if (UniqueSpecialDate(e) && o.AiredAt.HasValue && e.AiredAt!.Value.Date == o.AiredAt.Value.Date)
             {
                 return true;
             }
             var local = TitleKey(o.Title);
-            return local is not null && (TitleKey(e.Title) == local || TitleKey(e.EntryName) == local);
+            if (local is null)
+            {
+                return false;
+            }
+            if (TitleKey(e.Title) == local)
+            {
+                return true;
+            }
+            // An entry-name match claims "I own this entry's FILM". Only the
+            // entry's "Complete Movie" part qualifies — same-entry bonus
+            // shorts share the entry name but are distinct content
+            // (audit S-7: Boruto movie vs its same-day short).
+            return TitleKey(e.EntryName) == local && TitleKey(e.Title) == "completemovie";
         }
         bool SpecialContentMatch(RemoteEpisode e) => owned.Any(o => SpecialContentPair(e, o));
         bool TupleMatch(RemoteEpisode e) => e.Number.HasValue && tupleOwned.Any(o =>
@@ -231,6 +269,16 @@ public static class DiffEngine
         if (remote.SynthesizedSeasons && fallbackMatched > 0)
         {
             notes.Add($"{fallbackMatched} episode(s) matched via numbering fallback (AniDB episode ids missing or unreliable on those local files).");
+        }
+
+        // --- undated specials note (audit S-6) ----------------------------------
+        if (opts.IncludeSpecials)
+        {
+            var undatedSpecials = remote.Episodes.Count(e => IsSpecialEp(e) && !e.AiredAt.HasValue);
+            if (undatedSpecials > 0)
+            {
+                notes.Add($"{undatedSpecials} undated special(s) not auditable (no air date from the source).");
+            }
         }
 
         // --- "library exceeds source" note --------------------------------------

@@ -7,7 +7,15 @@ namespace Jellyfin.Plugin.DownloadTime.Services;
 /// <summary>Disk cache for remote catalogs (spec §2.4). Clock-injected TTLs.</summary>
 public partial class CatalogCache
 {
-    private sealed record Envelope<T>(DateTimeOffset FetchedAt, T Payload);
+    /// <summary>
+    /// Bump whenever parsing/union SEMANTICS change (not just record shapes):
+    /// cached payloads carry baked-in decisions (special demotion, entry
+    /// names) and must be refetched, not reinterpreted (audit S-1,
+    /// 2026-08-03). Envelopes without the current version are misses.
+    /// </summary>
+    public const int SchemaVersion = 2;
+
+    private sealed record Envelope<T>(DateTimeOffset FetchedAt, T Payload, int SchemaVersion = 0);
 
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
     private readonly string _dir;
@@ -35,7 +43,7 @@ public partial class CatalogCache
         try
         {
             var env = JsonSerializer.Deserialize<Envelope<T>>(File.ReadAllText(path), JsonOpts);
-            if (env is null || _clock.UtcNow - env.FetchedAt > ttl)
+            if (env is null || env.SchemaVersion != SchemaVersion || _clock.UtcNow - env.FetchedAt > ttl)
             {
                 return null;
             }
@@ -49,7 +57,7 @@ public partial class CatalogCache
 
     public void Store<T>(string key, T value)
     {
-        var env = new Envelope<T>(_clock.UtcNow, value);
+        var env = new Envelope<T>(_clock.UtcNow, value, SchemaVersion);
         File.WriteAllText(PathFor(key), JsonSerializer.Serialize(env, JsonOpts));
     }
 }

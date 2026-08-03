@@ -31,9 +31,13 @@ public class TvdbParserTests
         Assert.Equal("The Bone Orchard", first.Title);
         Assert.Equal(new DateTimeOffset(2017, 4, 30, 23, 59, 0, TimeSpan.Zero), first.AiredAt);
         Assert.Contains(regular, e => e.Season == 3 && e.Number == 10);
-        // ground truth: this capture has NO S00 rows (26 episodes, S1=8 S2=8 S3=10)
-        Assert.DoesNotContain(eps!, e => e.IsSpecial);
-        Assert.Equal(26, eps!.Count);
+        // ground truth (corrected with audit S-4): the capture carries ONE
+        // "Additional Specials" row ("SPECIAL 0x1", Season 1 Recap) that the
+        // pre-S-4 parser was blind to — 26 regulars + 1 special.
+        var special = Assert.Single(eps!, e => e.IsSpecial);
+        Assert.Equal((0, 1), (special.Season, special.Number));
+        Assert.Equal("7146210", special.SourceEpisodeId);
+        Assert.Equal(27, eps!.Count);
     }
 
     [Fact]

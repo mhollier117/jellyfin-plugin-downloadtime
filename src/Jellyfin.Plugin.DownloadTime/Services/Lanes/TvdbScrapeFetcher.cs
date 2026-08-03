@@ -25,6 +25,11 @@ public partial class TvdbScrapeFetcher : ITvdbSource
     [GeneratedRegex(@"S(\d+)E(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex EpisodeLabel();
 
+    // The all-seasons page lists specials under "Additional Specials" with
+    // labels like "SPECIAL 0x7" — not SxxEyy (audit S-4, live TWD page).
+    [GeneratedRegex(@"SPECIAL\s+0x(\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex SpecialLabel();
+
     [GeneratedRegex(@"/episodes/(\d+)")]
     private static partial Regex EpisodeHref();
 
@@ -111,18 +116,31 @@ public partial class TvdbScrapeFetcher : ITvdbSource
         {
             foreach (var li in items)
             {
-                var label = li.SelectSingleNode(".//span[contains(@class,'episode-label')]");
+                // Regular rows use <span class="episode-label">, the
+                // "Additional Specials" section uses <small> (audit S-4).
+                var label = li.SelectSingleNode(".//*[contains(@class,'episode-label')]");
                 if (label is null)
                 {
                     continue;
                 }
+                int season;
+                int number;
                 var m = EpisodeLabel().Match(label.InnerText);
-                if (!m.Success)
+                if (m.Success)
                 {
-                    continue;
+                    season = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+                    number = int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
                 }
-                var season = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
-                var number = int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
+                else
+                {
+                    var sp = SpecialLabel().Match(label.InnerText);
+                    if (!sp.Success)
+                    {
+                        continue;
+                    }
+                    season = 0;
+                    number = int.Parse(sp.Groups[1].Value, CultureInfo.InvariantCulture);
+                }
 
                 string? id = null;
                 string? title = null;
