@@ -21,7 +21,8 @@ public sealed record RemoteEpisode(
     int? AbsoluteNumber = null,  // cumulative regular-episode position across an AniDB entry chain
     string? EntryName = null,    // owning chain entry's title (synthesized unions)
     int? RuntimeMinutes = null,  // source-reported duration; null when the source does not expose one
-    string? SourceTypeCode = null); // source's own content type (AniDB epno type: 1 regular, 2 special, 3 credits, 4 trailer, 5 parody, 6 other)
+    string? SourceTypeCode = null, // source's own content type (AniDB epno type: 1 regular, 2 special, 3 credits, 4 trailer, 5 parody, 6 other)
+    string? AltTitle = null);      // title from a runtime-enrichment source (pattern matching only; never detection)
 
 /// <summary>Full remote catalog for one series.</summary>
 public sealed record RemoteCatalog(

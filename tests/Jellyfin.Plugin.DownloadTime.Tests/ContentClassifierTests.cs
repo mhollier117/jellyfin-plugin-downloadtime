@@ -45,19 +45,39 @@ public class ContentClassifierTests
         => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp("Opening 1", 90, typeCode), Opts()));
 
     [Fact]
-    public void AniDbType2_ShortRuntime_StaysSpecial()
+    public void AniDbType2_ShortRuntime_NoPattern_StaysSpecial()
     {
-        // Black Clover "Clover Clips" ~7 min: authoritative type beats the
-        // runtime threshold.
+        // Black Clover "Clover Clips" ~7 min: type 2 still beats the runtime
+        // threshold, which is what protects short LEGITIMATE specials.
         Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp("Clover Clips", 7, "2"), Opts()));
     }
 
-    [Fact]
-    public void AniDbType2_ExtraLookingTitle_StaysSpecial()
+    [Theory]
+    [InlineData("Clover Clips")]
+    [InlineData("Episode S1")]
+    [InlineData("The Day Naruto Became Hokage")]
+    [InlineData("Jump Festa 2003 - Find the Crimson Four-leaf Clover!")]
+    public void AniDbType2_NoPatternHit_StaysSpecial_AtAnyRuntime(string title)
     {
-        // Authoritative type also outranks title heuristics.
-        Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp("Behind the Scenes", 30, "2"), Opts()));
+        Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, 3, "2"), Opts()));
+        Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, null, "2"), Opts()));
     }
+
+    [Theory] // the eight live anime items with unambiguous extras titles
+    [InlineData("Behind the Scenes of Dr. Stone")]
+    [InlineData("Dr. Stone Special Feature")]
+    [InlineData("Behind the Scenes of Food Wars")]
+    [InlineData("Completed Screening Theater Greeting Event")]
+    [InlineData("Advance Screening Stage Greeting")]
+    [InlineData("Episode 7 Funimation Video Commentary")]
+    [InlineData("Episode 14 Funimation Video Commentary")]
+    [InlineData("Special Bonus Episode: Get Yourselves Caught Up with This Light-Novel Recap")]
+    public void AniDbType2_WithExtrasTitle_IsDemotedToExtra(string title)
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp(title, null, "2"), Opts()));
+
+    [Fact]
+    public void AniDbNonContentTypes_StayTerminalExtra_EvenWithInnocentTitle()
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp("Opening 1", 90, "3"), Opts()));
 
     // ----------------------------------------------------------------- b --
 
@@ -118,6 +138,48 @@ public class ContentClassifierTests
     [Fact]
     public void NullTitle_UnknownRuntime_IsSpecial_Conservative()
         => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(null), Opts()));
+
+    // ------------------------------------------------- new vocabulary (F3) --
+
+    [Theory]
+    [InlineData("Series 2 Best of")]
+    [InlineData("Best of '14-'15 (2)")]
+    [InlineData("Best Of - Episode 4")]
+    [InlineData("Sherlock Uncovered: The Women")]
+    [InlineData("Advance Screening Stage Greeting")]
+    [InlineData("Completed Screening Theater Greeting Event")]
+    [InlineData("Episode 7 Funimation Video Commentary")]
+    [InlineData("A Webisode")]
+    public void CompilationAndPromoVocabulary_IsExtra(string title)
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp(title, 60), Opts()));
+
+    [Theory] // "best of" must not swallow legitimate special titles
+    [InlineData("The Best of Both Worlds")]
+    [InlineData("The Christmas Invasion")]
+    [InlineData("The Abominable Bride")]
+    [InlineData("The Big Send Off Special")]
+    [InlineData("An Evening with Top Gear")]
+    public void LegitimateSpecialTitles_AreNotDemoted(string title)
+        => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, 72), Opts()));
+
+    [Fact]
+    public void RegexPatterns_AreSupported_AndBadOnesAreIgnored()
+    {
+        var good = new[] { @"re:^promo\b" };
+        Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp("Promo reel", 60), Opts(patterns: good)));
+        Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp("A promo reel", 60), Opts(patterns: good)));
+
+        var broken = new[] { "re:[unclosed(", "behind the scenes" };
+        Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp("Anything", 60), Opts(patterns: broken)));
+        Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp("Behind the Scenes", 60), Opts(patterns: broken)));
+    }
+
+    [Fact]
+    public void AltTitle_FromEnrichment_CanDemote()
+    {
+        var e = new RemoteEpisode(0, 1, "x", null, true, "Episode 104", null, null, 40, null, "Behind the Scenes: The Set");
+        Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(e, Opts()));
+    }
 
     [Fact]
     public void DefaultPatterns_CoverTheBriefedVocabulary()

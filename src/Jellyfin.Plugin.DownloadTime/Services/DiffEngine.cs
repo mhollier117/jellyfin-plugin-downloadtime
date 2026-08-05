@@ -170,28 +170,8 @@ public static class DiffEngine
         // title; movie entries are titled by the film, their sole "episode"
         // is just "Complete Movie") — is the same content regardless of
         // numbering or ids (audit D3ii).
-        static string? TitleKey(string? t)
-        {
-            if (string.IsNullOrWhiteSpace(t))
-            {
-                return null;
-            }
-            // Strip LEADING bracketed marker groups only ("[C] ", "[C/F] ",
-            // "[AC] [F] " — AFM canon/filler prefixes; audit S-2). Interior
-            // brackets stay part of the title.
-            var s = t.AsSpan().Trim();
-            while (s.Length > 0 && s[0] == '[')
-            {
-                var close = s.IndexOf(']');
-                if (close < 0)
-                {
-                    break;
-                }
-                s = s[(close + 1)..].TrimStart();
-            }
-            var key = new string(s.ToArray().Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
-            return key.Length == 0 ? null : key;
-        }
+        // Shared with RuntimeEnricher; strips leading AFM bracket markers.
+        static string? TitleKey(string? t) => TitleKeys.Normalize(t);
         bool SpecialContentPair(RemoteEpisode e, OwnedEpisode o)
         {
             if (!remote.SynthesizedSeasons || !e.IsSpecial || o.Season != 0)

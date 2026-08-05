@@ -25,7 +25,7 @@
         </div>
         <div class="inputContainer">
           <textarea is="emby-textarea" id="ExtraTitlePatterns" rows="5" label="Extras title patterns (one per line)" style="width:100%"></textarea>
-          <div class="fieldDescription">Case-insensitive substrings. A season-0 item whose title contains one of these is an extra regardless of runtime. Leave blank to restore the built-in list.</div>
+          <div class="fieldDescription">Case-insensitive substrings. A season-0 item whose title contains one of these is an extra regardless of runtime. Prefix a line with <b>re:</b> to use a regular expression instead. Leave blank to restore the built-in list.</div>
         </div>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="CreateVirtualEpisodes"/><span>Create native missing-episode placeholders (users must enable &quot;Display missing episodes&quot; in their display settings)</span></label>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ShowPosterBadges"/><span>Show poster badges</span></label>

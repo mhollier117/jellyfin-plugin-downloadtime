@@ -31,4 +31,13 @@ public interface ITmdbSource
 {
     Task<FetchOutcome> FetchSeriesAsync(string tmdbId, CancellationToken ct);
     Task<CollectionOutcome> FetchCollectionForMovieAsync(int movieTmdbId, CancellationToken ct);
+
+    /// <summary>
+    /// One season's episodes, used purely as a runtime/title enrichment
+    /// sidecar for lanes whose source reports no duration (TVDB scrape).
+    /// Returns an empty list when the season does not exist. Default
+    /// implementation keeps pre-enrichment fakes valid.
+    /// </summary>
+    Task<IReadOnlyList<RemoteEpisode>> FetchSeasonEpisodesAsync(string tmdbId, int seasonNumber, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<RemoteEpisode>>(Array.Empty<RemoteEpisode>());
 }

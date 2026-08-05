@@ -247,6 +247,12 @@ public class ScanService
                 error = outcome.Error;
                 if (catalog is not null)
                 {
+                    // Runtime enrichment sidecar (2026-08-05): the TVDB scrape
+                    // reports no duration, leaving most of its specials with
+                    // no classification signal. When the series also carries a
+                    // Tmdb id, one extra season-0 call supplies runtimes and
+                    // alternate titles. Detection still runs on THIS catalog.
+                    catalog = await EnrichRuntimesAsync(catalog, series, route, chainNotes, ct).ConfigureAwait(false);
                     _cache.Store(cacheKey, catalog);
                 }
             }
@@ -301,6 +307,57 @@ public class ScanService
             .ToList();
         var allNotes = chainNotes.Count == 0 ? diff.Notes : chainNotes.Concat(diff.Notes).ToList();
         return Report(null, usedFallback, notes: allNotes, missing: missing);
+    }
+
+    /// <summary>
+    /// Fills missing season-0 runtimes from TMDB when the routed source does
+    /// not report duration. Purely additive: never changes which catalog
+    /// drives detection, never adds/removes/renumbers claims. Conservative
+    /// matching lives in RuntimeEnricher; failures degrade to a note.
+    /// </summary>
+    private async Task<RemoteCatalog> EnrichRuntimesAsync(
+        RemoteCatalog catalog, SeriesItemInfo series, RouteDecision route, List<string> notes, CancellationToken ct)
+    {
+        if (route.Kind == SourceKind.TmdbId)
+        {
+            return catalog; // the TMDB lane already carries runtimes
+        }
+        var enrichable = catalog.Episodes.Count(e => e.IsSpecial && !e.RuntimeMinutes.HasValue);
+        if (enrichable == 0)
+        {
+            return catalog;
+        }
+        if (!series.ProviderIds.TryGetValue("Tmdb", out var tmdbId) || string.IsNullOrEmpty(tmdbId))
+        {
+            notes.Add($"{enrichable} special(s) have no runtime and this series has no TMDB id - they cannot be told apart from extras.");
+            return catalog;
+        }
+
+        IReadOnlyList<RemoteEpisode> seasonZero;
+        try
+        {
+            seasonZero = await _tmdb.FetchSeasonEpisodesAsync(tmdbId, 0, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            notes.Add($"TMDB runtime enrichment failed ({ex.Message}) - specials keep their existing classification.");
+            return catalog;
+        }
+        if (seasonZero.Count == 0)
+        {
+            notes.Add($"{enrichable} special(s) have no runtime and TMDB has no season 0 for this series - they cannot be told apart from extras.");
+            return catalog;
+        }
+
+        var result = RuntimeEnricher.Enrich(catalog, seasonZero);
+        if (result.Matched > 0)
+        {
+            notes.Add($"Runtime for {result.Matched} special(s) supplied by TMDB"
+                      + (result.Ambiguous > 0 ? $"; {result.Ambiguous} ambiguous match(es) skipped" : string.Empty)
+                      + (result.Unmatched > 0 ? $"; {result.Unmatched} not found there" : string.Empty)
+                      + ".");
+        }
+        return result.Catalog;
     }
 
     private sealed record ChainEntry(string Aid, AniDbEntryCacheItem Item, int Distance);

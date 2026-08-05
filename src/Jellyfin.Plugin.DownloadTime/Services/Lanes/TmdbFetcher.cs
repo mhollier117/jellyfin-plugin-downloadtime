@@ -82,6 +82,40 @@ public class TmdbFetcher : ITmdbSource
         return FetchOutcome.Ok(new RemoteCatalog("Tmdb", null, tmdbId, isEnded, episodes));
     }
 
+    /// <summary>
+    /// One season's episodes for runtime enrichment (audit 2026-08-05). A
+    /// missing season is not an error — enrichment simply finds nothing.
+    /// </summary>
+    public async Task<IReadOnlyList<RemoteEpisode>> FetchSeasonEpisodesAsync(string tmdbId, int seasonNumber, CancellationToken ct)
+    {
+        var (doc, error) = await GetJsonAsync(
+            $"/tv/{tmdbId}/season/{seasonNumber.ToString(CultureInfo.InvariantCulture)}", ct).ConfigureAwait(false);
+        if (error is not null || doc is null)
+        {
+            return Array.Empty<RemoteEpisode>();
+        }
+        using var season = doc;
+        if (!season.RootElement.TryGetProperty("episodes", out var eps) || eps.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<RemoteEpisode>();
+        }
+        var result = new List<RemoteEpisode>();
+        foreach (var e in eps.EnumerateArray())
+        {
+            int? number = e.TryGetProperty("episode_number", out var en) && en.ValueKind == JsonValueKind.Number ? en.GetInt32() : null;
+            DateTimeOffset? aired = null;
+            if (e.TryGetProperty("air_date", out var ad) && ad.ValueKind == JsonValueKind.String
+                && DateOnly.TryParse(ad.GetString(), out var d))
+            {
+                aired = AirTime.FromDate(d.Year, d.Month, d.Day);
+            }
+            var title = e.TryGetProperty("name", out var nm) ? nm.GetString() : null;
+            int? runtime = e.TryGetProperty("runtime", out var rt) && rt.ValueKind == JsonValueKind.Number ? rt.GetInt32() : null;
+            result.Add(new RemoteEpisode(seasonNumber, number, null, aired, seasonNumber == 0, title, RuntimeMinutes: runtime));
+        }
+        return result;
+    }
+
     public async Task<CollectionOutcome> FetchCollectionForMovieAsync(int movieTmdbId, CancellationToken ct)
     {
         var (movieDoc, error) = await GetJsonAsync($"/movie/{movieTmdbId.ToString(CultureInfo.InvariantCulture)}", ct).ConfigureAwait(false);

@@ -46,6 +46,16 @@ public static class ContentClassifier
         // "Grey's Anatomy on Jimmy Kimmel Live!" 22 min)
         "jimmy kimmel", "jimmy fallon", "tonight show", "late show", "late night",
         "stephen colbert", "conan", "graham norton", "the view", "good morning america",
+        // compilation/promo vocabulary the 2026-08-05 ground truth exposed
+        // ("Series 2 Best of", "Sherlock Uncovered", "Advance Screening Stage
+        // Greeting", "Funimation Video Commentary").
+        // "best of" needs precision: it must catch compilation titles without
+        // swallowing real ones like "The Best of Both Worlds", so it is a
+        // regex requiring the phrase to END the title or be followed by
+        // punctuation/digits rather than continuing into a noun phrase.
+        @"re:\bbest[- ]?of\b(?!\s+[\p{L}])",
+        "uncovered", "stage greeting", "screening",
+        "video commentary", "audio commentary", "compilation",
     };
 
     public static ContentKind Classify(RemoteEpisode episode, ClassifierOptions options)
@@ -55,11 +65,10 @@ public static class ContentClassifier
             return ContentKind.Episode;
         }
 
-        // (a) authoritative source typing
+        // (a) non-content source types are terminal extras (AniDB credits,
+        //     trailers, parodies, other) whatever they are called.
         switch (episode.SourceTypeCode)
         {
-            case "2":
-                return ContentKind.Special;
             case "3":
             case "4":
             case "5":
@@ -67,21 +76,36 @@ public static class ContentClassifier
                 return ContentKind.Extra;
         }
 
-        // (b) title patterns
-        if (MatchesExtraPattern(episode.Title, options.ExtraTitlePatterns))
+        // (b) title patterns — checked against the item's own title AND any
+        //     alternate title supplied by runtime enrichment. These now
+        //     outrank AniDB type 2 as well: a type-2 row literally called
+        //     "Behind the Scenes of Dr. Stone" is an extra (2026-08-05).
+        if (MatchesExtraPattern(episode.Title, options.ExtraTitlePatterns)
+            || MatchesExtraPattern(episode.AltTitle, options.ExtraTitlePatterns))
         {
             return ContentKind.Extra;
         }
 
-        // (c) runtime threshold
+        // (c) AniDB type 2 = genuine special. Terminal against the runtime
+        //     rule below, which is what protects short legitimate specials
+        //     (Black Clover "Clover Clips" ~7 min).
+        if (episode.SourceTypeCode == "2")
+        {
+            return ContentKind.Special;
+        }
+
+        // (d) runtime threshold
         if (episode.RuntimeMinutes is int runtime && runtime < options.ExtraRuntimeThresholdMinutes)
         {
             return ContentKind.Extra;
         }
 
-        // (d) conservative default
+        // (e) conservative default
         return ContentKind.Special;
     }
+
+    /// <summary>Prefix marking a pattern as a regular expression rather than a plain substring.</summary>
+    public const string RegexPrefix = "re:";
 
     public static bool MatchesExtraPattern(string? title, IReadOnlyList<string> patterns)
     {
@@ -91,7 +115,29 @@ public static class ContentClassifier
         }
         foreach (var p in patterns)
         {
-            if (!string.IsNullOrWhiteSpace(p) && title.Contains(p, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(p))
+            {
+                continue;
+            }
+            if (p.StartsWith(RegexPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                // A user-supplied bad pattern must never break a scan.
+                try
+                {
+                    if (System.Text.RegularExpressions.Regex.IsMatch(
+                            title, p[RegexPrefix.Length..],
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                            | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+                            TimeSpan.FromMilliseconds(100)))
+                    {
+                        return true;
+                    }
+                }
+                catch (ArgumentException) { }
+                catch (System.Text.RegularExpressions.RegexMatchTimeoutException) { }
+                continue;
+            }
+            if (title.Contains(p, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
