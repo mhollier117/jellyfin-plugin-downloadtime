@@ -21,6 +21,19 @@ public class PluginConfiguration : BasePluginConfiguration
 
     public bool IncludeSpecials { get; set; }
 
+    /// <summary>
+    /// Include EXTRAS (behind-the-scenes, panels, promos, recaps...) in the
+    /// report. Off by default: extras are bonus material, not missing content.
+    /// </summary>
+    public bool ReportExtras { get; set; }
+
+    /// <summary>Season-0 items shorter than this (when the source reports a runtime) are extras.</summary>
+    public int ExtraRuntimeThresholdMinutes { get; set; } = 15;
+
+    /// <summary>Title substrings marking an item as an extra (case-insensitive, user-editable).</summary>
+    public string[] ExtraTitlePatterns { get; set; }
+        = Services.ContentClassifier.DefaultExtraPatterns.ToArray();
+
     public bool CreateVirtualEpisodes { get; set; }
 
     public bool ShowPosterBadges { get; set; } = true;

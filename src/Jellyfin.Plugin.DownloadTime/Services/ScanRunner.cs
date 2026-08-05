@@ -23,7 +23,10 @@ public class ScanRunner
         c.EnableTvLane, c.EnableAnimeLane, c.EnableMovieLane,
         c.GraceHours, c.IncludeSpecials, c.MovieReleaseBufferDays,
         new HashSet<string>(c.ExcludedItemIds, StringComparer.OrdinalIgnoreCase),
-        TimeSpan.FromDays(c.ContinuingTtlDays), TimeSpan.FromDays(c.EndedTtlDays));
+        TimeSpan.FromDays(c.ContinuingTtlDays), TimeSpan.FromDays(c.EndedTtlDays),
+        c.ReportExtras,
+        c.ExtraTitlePatterns is { Length: > 0 } p ? p : ContentClassifier.DefaultExtraPatterns,
+        c.ExtraRuntimeThresholdMinutes > 0 ? c.ExtraRuntimeThresholdMinutes : 15);
 
     public async Task<ScanReport> RunAsync(bool fullRefresh, IProgress<double>? progress, CancellationToken ct)
     {

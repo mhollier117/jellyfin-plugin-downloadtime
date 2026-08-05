@@ -11,9 +11,13 @@
             .then(function (r) {
                 counts = {};
                 (r.Series || []).forEach(function (s) {
-                    var gaps = 0, news = 0, sp = 0;
-                    (s.Missing || []).forEach(function (m) { if (m.IsSpecial) sp++; else if (m.Kind === 'Gap') gaps++; else news++; });
-                    if (gaps + news + sp > 0) counts[String(s.ItemId).replace(/-/g, '').toLowerCase()] = { gaps: gaps, news: news, sp: sp };
+                    var gaps = 0, news = 0, sp = 0, ex = 0;
+                    (s.Missing || []).forEach(function (m) {
+                        if (m.Classification === 'Extra') ex++;
+                        else if (m.IsSpecial) sp++;
+                        else if (m.Kind === 'Gap') gaps++; else news++;
+                    });
+                    if (gaps + news + sp > 0) counts[String(s.ItemId).replace(/-/g, '').toLowerCase()] = { gaps: gaps, news: news, sp: sp, ex: ex };
                 });
                 decorate();
             })

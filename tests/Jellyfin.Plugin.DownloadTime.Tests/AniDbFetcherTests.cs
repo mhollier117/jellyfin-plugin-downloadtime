@@ -6,6 +6,7 @@
 // - HTTP non-200 -> Fail.
 // - request URL carries client/clientver/protover/request/aid params.
 // - PACING: two consecutive fetches -> second waits >= requestDelayMs (measured via FakeClock + recorded delayFn).
+using Jellyfin.Plugin.DownloadTime.Services;
 using Jellyfin.Plugin.DownloadTime.Model;
 using Jellyfin.Plugin.DownloadTime.Services.Lanes;
 using Jellyfin.Plugin.DownloadTime.Tests.Support;
@@ -140,8 +141,12 @@ public class AniDbFetcherTests
     {
         // Live defect 2026-07-26: every Boruto "gap" was an opening/ending
         // credit sequence. AniDB epno types: 1=regular, 2=special, 3=credits,
-        // 4=trailer, 5=parody, 6=other. Only 1 and 2 are downloadable content;
-        // 3-6 must never be reported as missing, even with IncludeSpecials on.
+        // 4=trailer, 5=parody, 6=other.
+        // Since 2026-08-05 types 3-6 are KEPT (carrying their type) instead of
+        // dropped at parse, so ContentClassifier can label them Extra and the
+        // report can optionally show them. The original guarantee still holds
+        // by default: only type 1 is ever a regular episode, and extras are
+        // excluded from the report unless ReportExtras is enabled.
         var xml = """
             <?xml version="1.0" encoding="UTF-8"?>
             <anime id="12661" restricted="false">
@@ -158,10 +163,20 @@ public class AniDbFetcherTests
             """;
         var (cat, err) = AniDbFetcher.ParseAnime(xml, new FakeClock(Now));
         Assert.Null(err);
-        var ids = cat!.Episodes.Select(e => e.SourceEpisodeId).ToArray();
-        Assert.Equal(new[] { "1", "2" }, ids);
-        Assert.False(cat.Episodes.Single(e => e.SourceEpisodeId == "1").IsSpecial);
+        // exactly one REGULAR episode; everything else is season-0 content
+        var regular = Assert.Single(cat!.Episodes.Where(e => !e.IsSpecial));
+        Assert.Equal("1", regular.SourceEpisodeId);
         Assert.True(cat.Episodes.Single(e => e.SourceEpisodeId == "2").IsSpecial);
+
+        // types 3-6 survive as classified EXTRAS, never as episodes/specials
+        var opts = new ClassifierOptions(ContentClassifier.DefaultExtraPatterns, 15);
+        foreach (var id in new[] { "3", "4", "5", "6", "7" })
+        {
+            var ep = cat.Episodes.Single(e => e.SourceEpisodeId == id);
+            Assert.True(ep.IsSpecial);
+            Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(ep, opts));
+        }
+        Assert.Equal(ContentKind.Special, ContentClassifier.Classify(cat.Episodes.Single(e => e.SourceEpisodeId == "2"), opts));
     }
 
     [Fact]
@@ -190,8 +205,10 @@ public class AniDbFetcherTests
     [Fact]
     public void ParseAnime_CreditsOnlyEntry_IsValidNotError()
     {
-        // Same rule after credits filtering: an entry holding only OP/ED
-        // sequences contributes no content, but is not a failure.
+        // An entry holding only OP/ED sequences contributes no EPISODES and is
+        // not a failure. Since 2026-08-05 the credits rows are retained as
+        // season-0 extras rather than discarded, so the entry is still
+        // content-free for detection purposes (extras hidden by default).
         var xml = """
             <?xml version="1.0" encoding="UTF-8"?>
             <anime id="99999">
@@ -202,6 +219,8 @@ public class AniDbFetcherTests
             """;
         var (cat, err) = AniDbFetcher.ParseAnime(xml, new FakeClock(Now));
         Assert.Null(err);
-        Assert.Empty(cat!.Episodes);
+        Assert.Empty(cat!.Episodes.Where(e => !e.IsSpecial));
+        var opts = new ClassifierOptions(ContentClassifier.DefaultExtraPatterns, 15);
+        Assert.All(cat.Episodes, e => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(e, opts)));
     }
 }

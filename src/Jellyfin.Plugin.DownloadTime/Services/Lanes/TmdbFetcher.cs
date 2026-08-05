@@ -66,7 +66,12 @@ public class TmdbFetcher : ITmdbSource
                     aired = AirTime.FromDate(d.Year, d.Month, d.Day);
                 }
                 var title = e.TryGetProperty("name", out var nm) ? nm.GetString() : null;
-                episodes.Add(new RemoteEpisode(sn, number, null, aired, sn == 0, title));
+                // TMDB exposes per-episode runtime on the season endpoint we
+                // already call (often null on older/bonus rows).
+                int? runtime = e.TryGetProperty("runtime", out var rt) && rt.ValueKind == JsonValueKind.Number
+                    ? rt.GetInt32()
+                    : null;
+                episodes.Add(new RemoteEpisode(sn, number, null, aired, sn == 0, title, RuntimeMinutes: runtime));
             }
         }
 

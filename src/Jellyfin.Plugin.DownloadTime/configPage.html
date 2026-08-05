@@ -18,6 +18,15 @@
         <div class="inputContainer"><input is="emby-input" type="number" id="GraceHours" min="0" label="Grace period after airing, hours (0 = off)"/></div>
         <div class="inputContainer"><input is="emby-input" type="number" id="MovieReleaseBufferDays" min="0" label="Movie release buffer, days"/></div>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="IncludeSpecials"/><span>Include specials (Season 0)</span></label>
+        <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ReportExtras"/><span>Also report extras (behind-the-scenes, panels, promos, recaps &mdash; counted separately)</span></label>
+        <div class="inputContainer">
+          <input is="emby-input" type="number" id="ExtraRuntimeThresholdMinutes" min="0" label="Extras runtime threshold (minutes)"/>
+          <div class="fieldDescription">Season-0 items shorter than this are treated as extras when the source reports a runtime. Anime episode types from AniDB always win over this.</div>
+        </div>
+        <div class="inputContainer">
+          <textarea is="emby-textarea" id="ExtraTitlePatterns" rows="5" label="Extras title patterns (one per line)" style="width:100%"></textarea>
+          <div class="fieldDescription">Case-insensitive substrings. A season-0 item whose title contains one of these is an extra regardless of runtime. Leave blank to restore the built-in list.</div>
+        </div>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="CreateVirtualEpisodes"/><span>Create native missing-episode placeholders (users must enable &quot;Display missing episodes&quot; in their display settings)</span></label>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ShowPosterBadges"/><span>Show poster badges</span></label>
         <label class="checkboxContainer"><input is="emby-checkbox" type="checkbox" id="ShowDetailBadges"/><span>Show series-page summary line</span></label>
@@ -37,14 +46,15 @@
   <script type="text/javascript">
   (function () {
     var pluginId = "4d557ba6-d562-4209-9a04-b782775dc2ff";
-    var fields = ["EnableTvLane","EnableAnimeLane","EnableMovieLane","IncludeSpecials","CreateVirtualEpisodes","ShowPosterBadges","ShowDetailBadges","ShowUserPage"];
-    var texts = ["TmdbApiKey","AniDbClientName","AniDbClientVersion","GraceHours","MovieReleaseBufferDays","RequestDelayMs"];
+    var fields = ["EnableTvLane","EnableAnimeLane","EnableMovieLane","IncludeSpecials","ReportExtras","CreateVirtualEpisodes","ShowPosterBadges","ShowDetailBadges","ShowUserPage"];
+    var texts = ["TmdbApiKey","AniDbClientName","AniDbClientVersion","GraceHours","MovieReleaseBufferDays","RequestDelayMs","ExtraRuntimeThresholdMinutes"];
 
     function loadConfig(page) {
       ApiClient.getPluginConfiguration(pluginId).then(function (c) {
         fields.forEach(function (f) { page.querySelector("#" + f).checked = !!c[f]; });
         texts.forEach(function (f) { page.querySelector("#" + f).value = c[f] != null ? c[f] : ""; });
         page.querySelector("#ExcludedItemIds").value = (c.ExcludedItemIds || []).join(",");
+        page.querySelector("#ExtraTitlePatterns").value = (c.ExtraTitlePatterns || []).join("\n");
       });
     }
 
@@ -63,6 +73,9 @@
           c.MovieReleaseBufferDays = parseInt(page.querySelector("#MovieReleaseBufferDays").value, 10) || 0;
           c.RequestDelayMs = parseInt(page.querySelector("#RequestDelayMs").value, 10) || 0;
           c.ExcludedItemIds = page.querySelector("#ExcludedItemIds").value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+          c.ExtraRuntimeThresholdMinutes = parseInt(page.querySelector("#ExtraRuntimeThresholdMinutes").value, 10) || 0;
+          var pats = page.querySelector("#ExtraTitlePatterns").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+          c.ExtraTitlePatterns = pats; // empty -> server restores the built-in list
           ApiClient.updatePluginConfiguration(pluginId, c).then(Dashboard.processPluginConfigurationUpdateResult);
         });
         return false;

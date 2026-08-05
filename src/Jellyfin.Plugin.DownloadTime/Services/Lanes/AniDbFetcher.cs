@@ -170,16 +170,19 @@ public class AniDbFetcher : IAniDbSource
                 continue;
             }
             // AniDB epno types: 1=regular, 2=special, 3=credits (OP/ED),
-            // 4=trailer, 5=parody, 6=other. Only 1 and 2 are downloadable
-            // content — credits/trailers/parodies are never "missing"
-            // (live defect 2026-07-26: Boruto reported 19 opening/ending
-            // sequences as missing episodes).
+            // 4=trailer, 5=parody, 6=other. Only type 1 is a regular episode;
+            // everything else lands in the season-0 bucket and carries its
+            // type so ContentClassifier can separate genuine specials (2)
+            // from extras (3-6). Before 2026-08-05 types 3-6 were dropped
+            // here outright (live defect 2026-07-26: Boruto reported 19
+            // opening/ending sequences as missing episodes); they are now
+            // kept but classified Extra, which the report hides by default.
             var typeAttr = epno.Attribute("type")?.Value;
-            if (typeAttr is not ("1" or "2"))
+            if (string.IsNullOrEmpty(typeAttr))
             {
                 continue;
             }
-            var isSpecial = typeAttr == "2";
+            var isSpecial = typeAttr != "1";
             var digits = new string(epno.Value.Where(char.IsDigit).ToArray());
             if (!int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
             {
@@ -195,7 +198,15 @@ public class AniDbFetcher : IAniDbSource
             var title = ep.Elements("title").FirstOrDefault(t => (string?)t.Attribute(XNamespace.Xml + "lang") == "en")?.Value
                         ?? ep.Elements("title").FirstOrDefault()?.Value;
 
-            episodes.Add(new RemoteEpisode(null, number, id, aired, isSpecial || isNonSeriesEntry, title));
+            int? runtime = null;
+            if (int.TryParse(ep.Element("length")?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var len) && len > 0)
+            {
+                runtime = len;
+            }
+
+            episodes.Add(new RemoteEpisode(
+                null, number, id, aired, isSpecial || isNonSeriesEntry, title,
+                RuntimeMinutes: runtime, SourceTypeCode: typeAttr));
         }
 
         // A well-formed entry with no content episodes is legitimate, not a

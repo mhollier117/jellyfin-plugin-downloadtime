@@ -31,9 +31,13 @@
         return o === undefined ? !!s.Muted : o;
     }
     function counts(s) {
-        var g = 0, n = 0, sp = 0;
-        (s.Missing || []).forEach(function (m) { if (m.IsSpecial) { sp++; } else if (m.Kind === 'New') { n++; } else { g++; } });
-        return { g: g, n: n, sp: sp, t: g + n + sp };
+        var g = 0, n = 0, sp = 0, ex = 0;
+        (s.Missing || []).forEach(function (m) {
+            if (m.Classification === 'Extra') { ex++; }
+            else if (m.Classification === 'Special' || (m.Classification == null && m.IsSpecial)) { sp++; }
+            else if (m.Kind === 'New') { n++; } else { g++; }
+        });
+        return { g: g, n: n, sp: sp, ex: ex, t: g + n + sp + ex };
     }
     function newestAir(s) {
         var best = 0;
@@ -103,13 +107,13 @@
 
     /* ---------- render ---------- */
     function totals() {
-        var t = { shows: 0, gaps: 0, news: 0, specials: 0, movies: 0 };
+        var t = { shows: 0, gaps: 0, news: 0, specials: 0, extras: 0, movies: 0 };
         var r = state.report || {};
         (r.Series || []).forEach(function (s) {
             if (isMuted(s)) return;
             var c = counts(s);
             if (c.t > 0) t.shows++;
-            t.gaps += c.g; t.news += c.n; t.specials += c.sp;
+            t.gaps += c.g; t.news += c.n; t.specials += c.sp; t.extras += c.ex;
         });
         (r.Collections || []).forEach(function (c) { t.movies += (c.Missing || []).length; });
         return t;
@@ -135,6 +139,7 @@
             { k: 'specials', cls: '', n: t.specials, l: 'Missing specials' },
             { k: 'movies', cls: '', n: t.movies, l: 'Missing movies' }
         ];
+        if (t.extras > 0) { defs.splice(4, 0, { k: 'extras', cls: '', n: t.extras, l: 'Extras' }); }
         overlay.querySelector('#dtUvTiles').innerHTML = defs.map(function (d) {
             return '<button type="button" class="dt-uv-tile ' + d.cls + (state.filter === d.k ? ' dt-uv-sel' : '') + '" data-uvfilter="' + d.k + '">'
                 + '<span class="dt-uv-n">' + num(d.n) + '</span><span class="dt-uv-l">' + d.l + '</span></button>';
@@ -144,7 +149,7 @@
     function renderChips() {
         var defs = [
             { k: 'all', l: 'All' }, { k: 'gaps', l: 'Gaps only' }, { k: 'new', l: 'New only' },
-            { k: 'specials', l: 'Specials' },
+            { k: 'specials', l: 'Specials' }, { k: 'extras', l: 'Extras' },
             { k: 'movies', l: 'Movies' }, { k: 'errors', l: 'Errors' }
         ];
         if (state.isAdmin) defs.push({ k: 'muted', l: 'Muted' });
@@ -160,12 +165,14 @@
             ? (m.IsSpecial ? m.EntryName : m.EntryName + ' E' + String(m.Number == null ? '?' : m.Number).padStart(2, '0')
                 + (m.AbsoluteNumber != null ? ' \u00b7 abs ' + m.AbsoluteNumber : ''))
             : 'S' + String(m.Season == null ? '?' : m.Season).padStart(2, '0') + 'E' + String(m.Number == null ? '?' : m.Number).padStart(2, '0');
-        var kind = m.IsSpecial ? '<span class="dt-uv-k dt-uv-s">Special</span>'
+        var kind = m.Classification === 'Extra' ? '<span class="dt-uv-k dt-uv-x">Extra</span>'
+            : m.IsSpecial ? '<span class="dt-uv-k dt-uv-s">Special</span>'
             : '<span class="dt-uv-k ' + (m.Kind === 'New' ? 'dt-uv-n' : 'dt-uv-g') + '">' + (m.Kind === 'New' ? 'New' : 'Gap') + '</span>';
+        var rt = m.RuntimeMinutes != null ? '<span class="dt-uv-epdate">' + m.RuntimeMinutes + ' min</span>' : '';
         return '<div class="dt-uv-ep"><span class="dt-uv-code">' + esc(code) + '</span>'
             + '<span class="dt-uv-eptitle">' + esc(m.Title || '') + '</span>'
             + (m.AiredAt ? '<span class="dt-uv-epdate">aired ' + esc(fmtDate(m.AiredAt)) + '</span>' : '')
-            + kind + '</div>';
+            + rt + kind + '</div>';
     }
 
     function epList(list) {
@@ -186,9 +193,10 @@
 
     function filteredEps(s) {
         var eps = s.Missing || [];
-        if (state.filter === 'gaps') eps = eps.filter(function (m) { return m.Kind !== 'New' && !m.IsSpecial; });
-        if (state.filter === 'new') eps = eps.filter(function (m) { return m.Kind === 'New' && !m.IsSpecial; });
-        if (state.filter === 'specials') eps = eps.filter(function (m) { return !!m.IsSpecial; });
+        if (state.filter === 'gaps') eps = eps.filter(function (m) { return m.Kind !== 'New' && !m.IsSpecial && m.Classification !== 'Extra'; });
+        if (state.filter === 'new') eps = eps.filter(function (m) { return m.Kind === 'New' && !m.IsSpecial && m.Classification !== 'Extra'; });
+        if (state.filter === 'specials') eps = eps.filter(function (m) { return m.Classification === 'Extra' ? false : !!m.IsSpecial; });
+        if (state.filter === 'extras') eps = eps.filter(function (m) { return m.Classification === 'Extra'; });
         return eps;
     }
 
@@ -204,7 +212,8 @@
             + (s.Error ? '<span class="dt-uv-pill dt-uv-warn">error</span>' : '');
         var chips = (c.g ? '<span class="dt-uv-cg">' + num(c.g) + ' gap' + (c.g === 1 ? '' : 's') + '</span>' : '')
             + (c.n ? '<span class="dt-uv-cn">' + num(c.n) + ' new</span>' : '')
-            + (c.sp ? '<span class="dt-uv-cs">' + num(c.sp) + ' special' + (c.sp === 1 ? '' : 's') + '</span>' : '');
+            + (c.sp ? '<span class="dt-uv-cs">' + num(c.sp) + ' special' + (c.sp === 1 ? '' : 's') + '</span>' : '')
+            + (c.ex ? '<span class="dt-uv-cx">' + num(c.ex) + ' extra' + (c.ex === 1 ? '' : 's') + '</span>' : '');
         var muteBtn = state.isAdmin
             ? '<button type="button" class="dt-uv-ibtn" data-uvact="' + (muted ? 'unmute' : 'mute') + '" data-uvid="' + nId + '" title="' + (muted ? 'Unmute' : 'Mute') + ' ' + esc(s.Name) + '">' + (muted ? '&#128266;' : '&#128263;') + '</button>'
             : '';
@@ -268,6 +277,7 @@
                 if (f === 'gaps') return c.g > 0;
                 if (f === 'new') return c.n > 0;
                 if (f === 'specials') return c.sp > 0;
+                if (f === 'extras') return c.ex > 0;
                 return c.t > 0;
             });
             sortSeries(shows);

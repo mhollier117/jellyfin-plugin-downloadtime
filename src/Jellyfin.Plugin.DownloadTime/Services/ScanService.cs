@@ -7,7 +7,14 @@ public sealed record ScanSettings(
     bool EnableTvLane, bool EnableAnimeLane, bool EnableMovieLane,
     int GraceHours, bool IncludeSpecials, int MovieReleaseBufferDays,
     IReadOnlySet<string> ExcludedItemIds,
-    TimeSpan ContinuingTtl, TimeSpan EndedTtl);
+    TimeSpan ContinuingTtl, TimeSpan EndedTtl,
+    bool ReportExtras = false,
+    IReadOnlyList<string>? ExtraTitlePatterns = null,
+    int ExtraRuntimeThresholdMinutes = 15)
+{
+    public ClassifierOptions Classifier => new(
+        ExtraTitlePatterns ?? ContentClassifier.DefaultExtraPatterns, ExtraRuntimeThresholdMinutes);
+}
 
 /// <summary>Orchestrates a full library scan (spec §2). Per-item failures are
 /// isolated; a source outage can never read as "everything missing".</summary>
@@ -261,11 +268,36 @@ public class ScanService
 
         var diff = DiffEngine.Diff(series.Episodes, catalog,
             new DiffOptions(_clock.UtcNow, settings.GraceHours, settings.IncludeSpecials));
+
+        // Extras are bonus material: when they are hidden from the report they
+        // must not become virtual placeholders either (placeholder planning
+        // reads LastDiffs).
+        if (!settings.ReportExtras)
+        {
+            var kept = diff.Missing
+                .Where(m => ContentClassifier.Classify(m.Episode, settings.Classifier) != ContentKind.Extra)
+                .ToList();
+            if (kept.Count != diff.Missing.Count)
+            {
+                diff = new SeriesDiff(kept, diff.Notes);
+            }
+        }
         diffs[series.Id] = (diff, catalog);
+        // Classification (Episode/Special/Extra) is a separate axis from Kind
+        // (Gap/New). Extras are bonus material: hidden unless opted in.
+        var classifier = settings.Classifier;
         var missing = diff.Missing
-            .Select(m => new MissingEpisodeDto(m.Episode.Season, m.Episode.Number, m.Episode.Title,
-                                               m.Episode.AiredAt, m.Kind.ToString(), m.Episode.SourceEpisodeId,
-                                               m.Episode.IsSpecial, m.Episode.EntryName, m.Episode.AbsoluteNumber))
+            .Select(m => new
+            {
+                m.Kind,
+                m.Episode,
+                Kindness = ContentClassifier.Classify(m.Episode, classifier),
+            })
+            .Where(x => settings.ReportExtras || x.Kindness != ContentKind.Extra)
+            .Select(x => new MissingEpisodeDto(x.Episode.Season, x.Episode.Number, x.Episode.Title,
+                                               x.Episode.AiredAt, x.Kind.ToString(), x.Episode.SourceEpisodeId,
+                                               x.Episode.IsSpecial, x.Episode.EntryName, x.Episode.AbsoluteNumber,
+                                               x.Kindness.ToString(), x.Episode.RuntimeMinutes))
             .ToList();
         var allNotes = chainNotes.Count == 0 ? diff.Notes : chainNotes.Concat(diff.Notes).ToList();
         return Report(null, usedFallback, notes: allNotes, missing: missing);
