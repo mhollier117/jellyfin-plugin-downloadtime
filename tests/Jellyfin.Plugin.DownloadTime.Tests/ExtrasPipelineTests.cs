@@ -96,7 +96,7 @@ public class ExtrasPipelineTests : IDisposable
         Assert.False(c.ReportExtras);
         Assert.Equal(15, c.ExtraRuntimeThresholdMinutes);
         Assert.NotEmpty(c.ExtraTitlePatterns);
-        Assert.Contains(c.ExtraTitlePatterns, p => p.Contains("behind the scenes", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(c.ExtraTitlePatterns, p => p.Contains("behind the", StringComparison.OrdinalIgnoreCase));
     }
 
     // --------------------------------------------------------- reporting ---

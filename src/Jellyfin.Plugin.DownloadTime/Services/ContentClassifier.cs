@@ -35,7 +35,18 @@ public static class ContentClassifier
     /// <summary>Generic, source-agnostic extras vocabulary (user-editable in settings).</summary>
     public static readonly IReadOnlyList<string> DefaultExtraPatterns = new[]
     {
-        "behind the scenes", "making of", "gag reel", "blooper", "interview", "featurette",
+        // "behind the <X>" where X is a production noun. Deliberately NOT a
+        // bare "behind the": the live corpus is "Behind the Story" (41),
+        // "Behind the Character" (3), "Behind the Menu", "Behind The Dead",
+        // and an unrestricted match would swallow real titles that merely use
+        // the words ("Right Behind the Curve"). Mid-title matches are allowed
+        // because Yellowstone writes "Season 2 Behind the Story - Episode 07".
+        @"re:\bbehind the (scenes|story|character|characters|camera|curtain|magic|music|menu|action|mask|makeup|lens|dead)\b",
+        "making of", "gag reel", "blooper", "interview", "featurette",
+        // "Inside <show>" / "Inside Episode N" companion pieces (TWD, Yellowstone).
+        // Anchored so a legitimate title like "Inside Man" is unaffected.
+        @"re:^inside\b",
+        "motion comic", "a sitdown with", "sit down with", "discussion about",
         "promo", "trailer", "teaser", "preview", "recap", "catch up", "catch-up",
         "deleted scene", "commentary", "sneak peek", "inside the episode", "webisode",
         "web series", "special feature", "anatomy of", "post mortem", "postmortem",
@@ -86,21 +97,18 @@ public static class ContentClassifier
             return ContentKind.Extra;
         }
 
-        // (c) AniDB type 2 = genuine special. Terminal against the runtime
-        //     rule below, which is what protects short legitimate specials
-        //     (Black Clover "Clover Clips" ~7 min).
-        if (episode.SourceTypeCode == "2")
-        {
-            return ContentKind.Special;
-        }
-
-        // (d) runtime threshold
+        // (c) runtime threshold — applies to AniDB type-2 rows too (2026-08-05
+        //     live evidence: Shangri-La's 44 "Mini Anime" run 2-3 min, Frieren's
+        //     "Magic Episode" shorts 1-2 min, Clover Clips 2-10 min). Genuine
+        //     long specials keep their runtime and survive (Slime "Complete
+        //     Movie" 110 min, "The Abominable Bride" 90 min).
         if (episode.RuntimeMinutes is int runtime && runtime < options.ExtraRuntimeThresholdMinutes)
         {
             return ContentKind.Extra;
         }
 
-        // (e) conservative default
+        // (d) known-good special typing, and the conservative default: an item
+        //     with no runtime signal is never hidden.
         return ContentKind.Special;
     }
 

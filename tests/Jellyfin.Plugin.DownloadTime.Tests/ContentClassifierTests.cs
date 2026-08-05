@@ -44,24 +44,28 @@ public class ContentClassifierTests
     public void AniDbNonContentTypes_AreExtra(string typeCode)
         => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp("Opening 1", 90, typeCode), Opts()));
 
-    [Fact]
-    public void AniDbType2_ShortRuntime_NoPattern_StaysSpecial()
-    {
-        // Black Clover "Clover Clips" ~7 min: type 2 still beats the runtime
-        // threshold, which is what protects short LEGITIMATE specials.
-        Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp("Clover Clips", 7, "2"), Opts()));
-    }
+    [Theory] // live shapes: Shangri-La "Mini Anime" 2-3 min, Clover Clips 2-10 min
+    [InlineData("Mini Anime 7", 2)]
+    [InlineData("Clover Clips: Supersized! 2", 2)]
+    [InlineData("Magic Episode 4: Magic to Make a Good Scent Come from the Body", 1)]
+    [InlineData("Episode S1", 14)]
+    public void AniDbType2_ShortKnownRuntime_IsDemoted(string title, int runtime)
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp(title, runtime, "2"), Opts()));
 
-    [Theory]
-    [InlineData("Clover Clips")]
+    [Theory] // the long ones must survive: Slime movie 110m, Abominable Bride 90m
+    [InlineData("Complete Movie", 110)]
+    [InlineData("The Abominable Bride", 90)]
+    [InlineData("The Journey So Far", 86)]
+    [InlineData("Episode S1", 15)]
+    public void AniDbType2_LongRuntime_StaysSpecial(string title, int runtime)
+        => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, runtime, "2"), Opts()));
+
+    [Theory] // no runtime = no signal = conservative Special, type 2 or not
     [InlineData("Episode S1")]
     [InlineData("The Day Naruto Became Hokage")]
     [InlineData("Jump Festa 2003 - Find the Crimson Four-leaf Clover!")]
-    public void AniDbType2_NoPatternHit_StaysSpecial_AtAnyRuntime(string title)
-    {
-        Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, 3, "2"), Opts()));
-        Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, null, "2"), Opts()));
-    }
+    public void AniDbType2_UnknownRuntime_StaysSpecial(string title)
+        => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, null, "2"), Opts()));
 
     [Theory] // the eight live anime items with unambiguous extras titles
     [InlineData("Behind the Scenes of Dr. Stone")]
@@ -161,6 +165,50 @@ public class ContentClassifierTests
     [InlineData("An Evening with Top Gear")]
     public void LegitimateSpecialTitles_AreNotDemoted(string title)
         => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, 72), Opts()));
+
+    // ------------------------------- unknown-runtime vocabulary (v1.3.8) --
+
+    [Theory] // Yellowstone / TWD / Dexter / Shameless live shapes
+    [InlineData("Season 2 Behind the Story - Episode 07")]
+    [InlineData("Behind the Story")]
+    [InlineData("Inside Yellowstone")]
+    [InlineData("Inside The Walking Dead: The Last Episodes")]
+    [InlineData("Inside Episode 402")]
+    [InlineData("Early Cuts: Alex Timmons Motion Comic")]
+    [InlineData("A Sitdown with Michael C. Hall")]
+    [InlineData("A Shameless Discussion about Family")]
+    public void UnknownRuntimeVocabulary_IsExtra(string title)
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp(title, null), Opts()));
+
+    [Theory] // "inside" is start-anchored and "behind the" needs a production
+             // noun, so ordinary uses of both words survive
+    [InlineData("The Man Inside")]
+    [InlineData("Right Behind the Curve")]
+    [InlineData("Behind the Wheel of a Dream")]
+    [InlineData("Step Up")]
+    public void InsideAndBehind_DoNotSwallowLegitimateTitles(string title)
+        => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, null), Opts()));
+
+    [Fact]
+    public void InsideAnchor_DemotesAnyTitleStartingWithInside_DocumentedRisk()
+    {
+        // All 38 live "Inside ..." season-0 items are companion pieces
+        // (Inside The Walking Dead / Inside Episode 402 / Inside Yellowstone /
+        // Inside Chester's Mill), so the anchor is worth its one risk: a real
+        // special literally titled "Inside Man" would also be demoted.
+        Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp("Inside Man", null), Opts()));
+    }
+
+    [Fact]
+    public void StreetOutlawsStyleEpisodeTitles_StaySpecial()
+    {
+        // Genuine-looking episode titles with no extras signal: nothing was
+        // invented for these; they must remain Special.
+        foreach (var t in new[] { "Step Up", "Wild Horses", "Paint it Black", "No Prep Kings: Season 5" })
+        {
+            Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(t, null), Opts()));
+        }
+    }
 
     [Fact]
     public void RegexPatterns_AreSupported_AndBadOnesAreIgnored()
