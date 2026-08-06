@@ -22,7 +22,8 @@ public sealed record RemoteEpisode(
     string? EntryName = null,    // owning chain entry's title (synthesized unions)
     int? RuntimeMinutes = null,  // source-reported duration; null when the source does not expose one
     string? SourceTypeCode = null, // source's own content type (AniDB epno type: 1 regular, 2 special, 3 credits, 4 trailer, 5 parody, 6 other)
-    string? AltTitle = null);      // title from a runtime-enrichment source (pattern matching only; never detection)
+    string? AltTitle = null,       // title from a runtime-enrichment source (pattern matching only; never detection)
+    string? SourceSignificance = null); // TVmaze episode type: "significant" | "insignificant" (authoritative where present)
 
 /// <summary>Full remote catalog for one series.</summary>
 public sealed record RemoteCatalog(

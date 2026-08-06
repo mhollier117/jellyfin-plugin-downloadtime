@@ -13,7 +13,7 @@ public partial class CatalogCache
     /// names) and must be refetched, not reinterpreted (audit S-1,
     /// 2026-08-03). Envelopes without the current version are misses.
     /// </summary>
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
 
     private sealed record Envelope<T>(DateTimeOffset FetchedAt, T Payload, int SchemaVersion = 0);
 

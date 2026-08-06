@@ -7,6 +7,14 @@ public interface ITvmazeSource
 {
     Task<FetchOutcome> FetchByTvdbIdAsync(string tvdbId, CancellationToken ct);
     Task<FetchOutcome> FetchByImdbIdAsync(string imdbId, CancellationToken ct);
+
+    /// <summary>
+    /// Season-0 items with TVmaze's authoritative per-episode significance
+    /// (significant/insignificant) and runtime, for classification enrichment.
+    /// Empty when the show is unknown there. Default keeps older fakes valid.
+    /// </summary>
+    Task<IReadOnlyList<RemoteEpisode>> FetchSpecialsByTvdbIdAsync(string tvdbId, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<RemoteEpisode>>(Array.Empty<RemoteEpisode>());
 }
 /// <summary>Single AniDB entry plus its outgoing Sequel relation ids.</summary>
 public sealed record AniDbEntryOutcome(RemoteCatalog? Catalog, IReadOnlyList<string> SequelIds, string? Error);

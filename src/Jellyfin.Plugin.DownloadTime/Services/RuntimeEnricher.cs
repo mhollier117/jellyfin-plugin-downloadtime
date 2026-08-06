@@ -56,7 +56,13 @@ public static class RuntimeEnricher
             {
                 var m = candidates[0];
                 matched++;
-                episodes.Add(e with { RuntimeMinutes = m.RuntimeMinutes, AltTitle = m.Title });
+                episodes.Add(e with
+                {
+                    // never overwrite what the routed source already knows
+                    RuntimeMinutes = e.RuntimeMinutes ?? m.RuntimeMinutes,
+                    AltTitle = e.AltTitle ?? m.Title,
+                    SourceSignificance = e.SourceSignificance ?? m.SourceSignificance,
+                });
                 continue;
             }
             if (candidates.Count > 1)
@@ -73,6 +79,10 @@ public static class RuntimeEnricher
         return new EnrichmentResult(catalog with { Episodes = episodes }, matched, ambiguous, unmatched);
     }
 
-    /// <summary>Season-0 content that has no duration yet — the only enrichable rows.</summary>
-    private static bool NeedsRuntime(RemoteEpisode e) => e.IsSpecial && !e.RuntimeMinutes.HasValue;
+    /// <summary>
+    /// Season-0 content still lacking a signal — no duration, and no
+    /// significance verdict from an authoritative source.
+    /// </summary>
+    private static bool NeedsRuntime(RemoteEpisode e)
+        => e.IsSpecial && (!e.RuntimeMinutes.HasValue || e.SourceSignificance is null);
 }

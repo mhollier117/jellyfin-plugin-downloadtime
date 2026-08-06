@@ -64,8 +64,16 @@ public static class ContentClassifier
         // swallowing real ones like "The Best of Both Worlds", so it is a
         // regex requiring the phrase to END the title or be followed by
         // punctuation/digits rather than continuing into a noun phrase.
-        @"re:\bbest[- ]?of\b(?!\s+[\p{L}])",
+        // Matches compilation phrasing — "Best of" at the end, before
+        // punctuation/a year, or followed (within a few words) by
+        // season/series/episode — while sparing "The Best of Both Worlds".
+        @"re:\bbest[- ]?of\b(?:\s*$|\s*[^\w\s]|\s+(?:\w+\s+){0,3}(?:season|series|episode)s?\b)",
         "uncovered", "stage greeting", "screening",
+        // measured single-purpose additions (2026-08-05 corpus)
+        // "<subject> 101" primer shorts ("Blood Spatter 101", "Callouts 101").
+        // End-anchored and guarded so ordinary numbering ("Episode 101") is
+        // untouched.
+        "access all areas", @"re:(?<!\bepisode )\b101$",
         "video commentary", "audio commentary", "compilation",
     };
 
@@ -87,6 +95,14 @@ public static class ContentClassifier
                 return ContentKind.Extra;
         }
 
+        // (a2) TVmaze marks each special significant or insignificant. Where
+        //      present this is authoritative: GoT's "You Win or You Die" and
+        //      "Greatest Moments" are insignificant despite running 60/120 min.
+        if (string.Equals(episode.SourceSignificance, InsignificantSpecial, StringComparison.OrdinalIgnoreCase))
+        {
+            return ContentKind.Extra;
+        }
+
         // (b) title patterns — checked against the item's own title AND any
         //     alternate title supplied by runtime enrichment. These now
         //     outrank AniDB type 2 as well: a type-2 row literally called
@@ -95,6 +111,13 @@ public static class ContentClassifier
             || MatchesExtraPattern(episode.AltTitle, options.ExtraTitlePatterns))
         {
             return ContentKind.Extra;
+        }
+
+        // (b2) an explicitly SIGNIFICANT special is real content, however
+        //      short — terminal above the runtime rule.
+        if (string.Equals(episode.SourceSignificance, SignificantSpecial, StringComparison.OrdinalIgnoreCase))
+        {
+            return ContentKind.Special;
         }
 
         // (c) runtime threshold — applies to AniDB type-2 rows too (2026-08-05
@@ -114,6 +137,10 @@ public static class ContentClassifier
 
     /// <summary>Prefix marking a pattern as a regular expression rather than a plain substring.</summary>
     public const string RegexPrefix = "re:";
+
+    /// <summary>TVmaze significance values carried on <see cref="RemoteEpisode.SourceSignificance"/>.</summary>
+    public const string SignificantSpecial = "significant";
+    public const string InsignificantSpecial = "insignificant";
 
     public static bool MatchesExtraPattern(string? title, IReadOnlyList<string> patterns)
     {

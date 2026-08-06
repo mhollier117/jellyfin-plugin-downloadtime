@@ -145,6 +145,16 @@ public class ContentClassifierTests
 
     // ------------------------------------------------- new vocabulary (F3) --
 
+    [Theory] // live Top Gear strings that leaked past the 1.3.7.0 regex
+    [InlineData("Best of Season 15 (1)")]
+    [InlineData("Best of Season 16 (2)")]
+    [InlineData("Best of Season 17 and 18 (3)")]
+    [InlineData("Best of Season 19 (1)")]
+    [InlineData("Best of Season 20 and Season 21 (4)")]
+    [InlineData("Best of Top Gear Series 29 & 30 (1)")]
+    public void BestOfSeasonCompilations_AreExtra(string title)
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp(title, 60), Opts()));
+
     [Theory]
     [InlineData("Series 2 Best of")]
     [InlineData("Best of '14-'15 (2)")]
@@ -187,6 +197,20 @@ public class ContentClassifierTests
     [InlineData("Behind the Wheel of a Dream")]
     [InlineData("Step Up")]
     public void InsideAndBehind_DoNotSwallowLegitimateTitles(string title)
+        => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, null), Opts()));
+
+    [Theory] // narrow, measured additions (v1.3.9)
+    [InlineData("Access All Areas")]
+    [InlineData("Blood Spatter 101")]
+    [InlineData("Callouts 101")]
+    public void MeasuredVocabularyAdditions_AreExtra(string title)
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp(title, null), Opts()));
+
+    [Theory] // "101" is END-anchored so ordinary numbering survives
+    [InlineData("Episode 101")]
+    [InlineData("Room 101 Revisited")]
+    [InlineData("Unaired Pilot")]      // genuine unreleased content, never hidden
+    public void MeasuredAdditions_DoNotOverReach(string title)
         => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, null), Opts()));
 
     [Fact]

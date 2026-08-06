@@ -253,6 +253,7 @@ public class ScanService
                     // Tmdb id, one extra season-0 call supplies runtimes and
                     // alternate titles. Detection still runs on THIS catalog.
                     catalog = await EnrichRuntimesAsync(catalog, series, route, chainNotes, ct).ConfigureAwait(false);
+                    catalog = await EnrichSignificanceAsync(catalog, series, chainNotes, ct).ConfigureAwait(false);
                     _cache.Store(cacheKey, catalog);
                 }
             }
@@ -275,13 +276,29 @@ public class ScanService
         var diff = DiffEngine.Diff(series.Episodes, catalog,
             new DiffOptions(_clock.UtcNow, settings.GraceHours, settings.IncludeSpecials));
 
+        // Repeated-prefix runs whose prefix carries production vocabulary are
+        // bonus material even without runtimes (audit 2026-08-05). Computed
+        // per series over the whole season-0 set, then applied to items the
+        // per-episode rules left as Specials.
+        var prefixKeys = PrefixGroups.DemotableKeys(catalog.Episodes, settings.Classifier);
+        ContentKind Classify(RemoteEpisode e)
+        {
+            var kind = ContentClassifier.Classify(e, settings.Classifier);
+            if (kind == ContentKind.Special && !e.RuntimeMinutes.HasValue
+                && PrefixGroups.KeyFor(e) is string key && prefixKeys.Contains(key))
+            {
+                return ContentKind.Extra;
+            }
+            return kind;
+        }
+
         // Extras are bonus material: when they are hidden from the report they
         // must not become virtual placeholders either (placeholder planning
         // reads LastDiffs).
         if (!settings.ReportExtras)
         {
             var kept = diff.Missing
-                .Where(m => ContentClassifier.Classify(m.Episode, settings.Classifier) != ContentKind.Extra)
+                .Where(m => Classify(m.Episode) != ContentKind.Extra)
                 .ToList();
             if (kept.Count != diff.Missing.Count)
             {
@@ -291,13 +308,12 @@ public class ScanService
         diffs[series.Id] = (diff, catalog);
         // Classification (Episode/Special/Extra) is a separate axis from Kind
         // (Gap/New). Extras are bonus material: hidden unless opted in.
-        var classifier = settings.Classifier;
         var missing = diff.Missing
             .Select(m => new
             {
                 m.Kind,
                 m.Episode,
-                Kindness = ContentClassifier.Classify(m.Episode, classifier),
+                Kindness = Classify(m.Episode),
             })
             .Where(x => settings.ReportExtras || x.Kindness != ContentKind.Extra)
             .Select(x => new MissingEpisodeDto(x.Episode.Season, x.Episode.Number, x.Episode.Title,
@@ -356,6 +372,45 @@ public class ScanService
                       + (result.Ambiguous > 0 ? $"; {result.Ambiguous} ambiguous match(es) skipped" : string.Empty)
                       + (result.Unmatched > 0 ? $"; {result.Unmatched} not found there" : string.Empty)
                       + ".");
+        }
+        return result.Catalog;
+    }
+
+    /// <summary>
+    /// Second enrichment pass: TVmaze publishes an authoritative per-episode
+    /// significance (significant/insignificant) plus runtime, keyless and
+    /// sparse. Same conservative unique-match rule; failures are silent.
+    /// </summary>
+    private async Task<RemoteCatalog> EnrichSignificanceAsync(
+        RemoteCatalog catalog, SeriesItemInfo series, List<string> notes, CancellationToken ct)
+    {
+        if (!catalog.Episodes.Any(e => e.IsSpecial && (e.SourceSignificance is null || !e.RuntimeMinutes.HasValue)))
+        {
+            return catalog;
+        }
+        if (!series.ProviderIds.TryGetValue("Tvdb", out var tvdbId) || string.IsNullOrEmpty(tvdbId))
+        {
+            return catalog;
+        }
+
+        IReadOnlyList<RemoteEpisode> specials;
+        try
+        {
+            specials = await _tvmaze.FetchSpecialsByTvdbIdAsync(tvdbId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return catalog;
+        }
+        if (specials.Count == 0)
+        {
+            return catalog;
+        }
+
+        var result = RuntimeEnricher.Enrich(catalog, specials);
+        if (result.Matched > 0)
+        {
+            notes.Add($"TVmaze classified {result.Matched} special(s) by significance.");
         }
         return result.Catalog;
     }

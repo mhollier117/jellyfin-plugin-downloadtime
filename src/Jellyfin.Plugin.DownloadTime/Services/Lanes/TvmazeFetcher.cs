@@ -17,6 +17,71 @@ public class TvmazeFetcher : ITvmazeSource
     public Task<FetchOutcome> FetchByImdbIdAsync(string imdbId, CancellationToken ct)
         => FetchAsync($"https://api.tvmaze.com/lookup/shows?imdb={Uri.EscapeDataString(imdbId)}", ct);
 
+    /// <summary>
+    /// Season-0 items with TVmaze's episode `type` mapped to significance and
+    /// its runtime (2026-08-05). Coverage is sparse but authoritative where
+    /// present. Any failure degrades to an empty list — never an error.
+    /// </summary>
+    public async Task<IReadOnlyList<RemoteEpisode>> FetchSpecialsByTvdbIdAsync(string tvdbId, CancellationToken ct)
+    {
+        try
+        {
+            using var showResp = await _http.GetAsync(
+                $"https://api.tvmaze.com/lookup/shows?thetvdb={Uri.EscapeDataString(tvdbId)}", ct).ConfigureAwait(false);
+            if (!showResp.IsSuccessStatusCode)
+            {
+                return Array.Empty<RemoteEpisode>();
+            }
+            using var showDoc = JsonDocument.Parse(await showResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            if (showDoc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return Array.Empty<RemoteEpisode>();
+            }
+            var showId = showDoc.RootElement.GetProperty("id").GetInt32();
+
+            using var epResp = await _http.GetAsync(
+                $"https://api.tvmaze.com/shows/{showId.ToString(System.Globalization.CultureInfo.InvariantCulture)}/episodes?specials=1",
+                ct).ConfigureAwait(false);
+            if (!epResp.IsSuccessStatusCode)
+            {
+                return Array.Empty<RemoteEpisode>();
+            }
+            using var epDoc = JsonDocument.Parse(await epResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+
+            var result = new List<RemoteEpisode>();
+            foreach (var e in epDoc.RootElement.EnumerateArray())
+            {
+                var type = e.TryGetProperty("type", out var t) ? t.GetString() : null;
+                if (type is null || string.Equals(type, "regular", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                var significance = type.StartsWith("insignificant", StringComparison.OrdinalIgnoreCase)
+                    ? ContentClassifier.InsignificantSpecial
+                    : ContentClassifier.SignificantSpecial;
+
+                DateTimeOffset? aired = null;
+                if (e.TryGetProperty("airdate", out var ad) && ad.ValueKind == JsonValueKind.String
+                    && DateOnly.TryParse(ad.GetString(), out var d))
+                {
+                    aired = AirTime.FromDate(d.Year, d.Month, d.Day);
+                }
+                int? runtime = e.TryGetProperty("runtime", out var rt) && rt.ValueKind == JsonValueKind.Number
+                    ? rt.GetInt32()
+                    : null;
+                result.Add(new RemoteEpisode(
+                    0, e.TryGetProperty("number", out var n) && n.ValueKind == JsonValueKind.Number ? n.GetInt32() : null,
+                    null, aired, true, e.TryGetProperty("name", out var nm) ? nm.GetString() : null,
+                    RuntimeMinutes: runtime, SourceSignificance: significance));
+            }
+            return result;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            return Array.Empty<RemoteEpisode>();
+        }
+    }
+
     private async Task<FetchOutcome> FetchAsync(string lookupUrl, CancellationToken ct)
     {
         try
