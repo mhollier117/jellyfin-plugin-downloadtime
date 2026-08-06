@@ -133,14 +133,31 @@ public class TvmazeSignificanceTests
     private static RemoteEpisode Sp(string title, int? runtime, string? significance)
         => new(0, 1, "x", null, true, title, RuntimeMinutes: runtime, SourceSignificance: significance);
 
+    [Theory] // short/unknown insignificant items are bonus material
+    [InlineData("The Dutton Legacy", 5)]
+    [InlineData("Inside Game of Thrones", 11)]
+    [InlineData("Inside Game of Thrones - Prosthetics", 4)]
+    [InlineData("Some Untimed Clip", null)]
+    public void InsignificantSpecial_ShortOrUnknownRuntime_IsExtra(string title, int? runtime)
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp(title, runtime, "insignificant"), Opts()));
+
+    [Theory] // TVmaze "significance" means significance to series continuity,
+             // NOT bonus-vs-content: an episode-length item is still an episode
+    [InlineData("Street Outlaws vs. Fast N' Loud: Build to Mega Race", 60)]
+    [InlineData("Memphis Blues", 60)]
+    [InlineData("Shut Up and Drive", 60)]
+    [InlineData("Sin City Showdown", 60)]
+    [InlineData("Bristol: Road to $100K", 60)]
+    [InlineData("Race to the Top", 60)]
+    [InlineData("Bad Hair Day: Part 1 - A Sore Subject", 60)]
+    [InlineData("Bad Hair Day: Part 2 - A Helping Hand", 60)]
+    [InlineData("Bad Hair Day: Part 3 - Friendly Neighborhood Eisbiber", 60)]
+    public void InsignificantSpecial_EpisodeLength_StaysSpecial(string title, int runtime)
+        => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, runtime, "insignificant"), Opts()));
+
     [Fact]
-    public void InsignificantSpecial_IsExtra_EvenWhenFeatureLength()
-    {
-        // GoT "You Win or You Die" is a 60 min BTS piece TVmaze marks
-        // insignificant; "Greatest Moments" runs 120 min.
-        Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp("You Win or You Die", 60, "insignificant"), Opts()));
-        Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp("Greatest Moments", 120, "insignificant"), Opts()));
-    }
+    public void InsignificantSpecial_ExactlyAtThreshold_StaysSpecial()
+        => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp("Borderline Item", 15, "insignificant"), Opts()));
 
     [Fact]
     public void SignificantSpecial_StaysSpecial_EvenWhenShort()

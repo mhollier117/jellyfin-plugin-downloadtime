@@ -199,6 +199,20 @@ public class ContentClassifierTests
     public void InsideAndBehind_DoNotSwallowLegitimateTitles(string title)
         => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, null), Opts()));
 
+    [Theory] // "<name> Revealed:" companion series (GoT "The Game Revealed")
+    [InlineData("The Game Revealed: Season 6 Episode 1 & 2")]
+    [InlineData("The Game Revealed: Season 7 Episode 2")]
+    [InlineData("The Game Revealed: Season 8 Episode 3")]
+    public void RevealedCompanionSeries_IsExtra(string title)
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp(title, 60), Opts()));
+
+    [Theory] // scoped to the "Revealed:" head, so ordinary uses survive
+    [InlineData("Secrets Revealed")]
+    [InlineData("The Truth Revealed")]
+    [InlineData("All Will Be Revealed")]
+    public void RevealedInOrdinaryTitles_StaysSpecial(string title)
+        => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, 60), Opts()));
+
     [Theory] // narrow, measured additions (v1.3.9)
     [InlineData("Access All Areas")]
     [InlineData("Blood Spatter 101")]

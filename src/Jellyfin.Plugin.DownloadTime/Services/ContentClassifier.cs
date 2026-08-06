@@ -69,6 +69,11 @@ public static class ContentClassifier
         // season/series/episode — while sparing "The Best of Both Worlds".
         @"re:\bbest[- ]?of\b(?:\s*$|\s*[^\w\s]|\s+(?:\w+\s+){0,3}(?:season|series|episode)s?\b)",
         "uncovered", "stage greeting", "screening",
+        // "<name> Revealed:" companion series (GoT "The Game Revealed: Season
+        // 7 Episode 2"). Scoped to the colon so ordinary titles that merely
+        // end in the word ("Secrets Revealed") are untouched; catches 17/17
+        // of the live corpus.
+        @"re:\brevealed\b\s*:",
         // measured single-purpose additions (2026-08-05 corpus)
         // "<subject> 101" primer shorts ("Blood Spatter 101", "Callouts 101").
         // End-anchored and guarded so ordinary numbering ("Episode 101") is
@@ -95,12 +100,20 @@ public static class ContentClassifier
                 return ContentKind.Extra;
         }
 
-        // (a2) TVmaze marks each special significant or insignificant. Where
-        //      present this is authoritative: GoT's "You Win or You Die" and
-        //      "Greatest Moments" are insignificant despite running 60/120 min.
+        // (a2) TVmaze marks each special significant or insignificant, but that
+        //      axis is significance to SERIES CONTINUITY, not bonus-vs-content:
+        //      it files 60-minute crossover episodes ("Street Outlaws vs. Fast
+        //      N' Loud", Grimm's "Bad Hair Day" parts) as insignificant too.
+        //      So it only implies "extra" for items that are not
+        //      episode-length; an episode-length item is still an episode.
         if (string.Equals(episode.SourceSignificance, InsignificantSpecial, StringComparison.OrdinalIgnoreCase))
         {
-            return ContentKind.Extra;
+            var episodeLength = episode.RuntimeMinutes is int insigRuntime
+                                && insigRuntime >= options.ExtraRuntimeThresholdMinutes;
+            if (!episodeLength)
+            {
+                return ContentKind.Extra;
+            }
         }
 
         // (b) title patterns — checked against the item's own title AND any
