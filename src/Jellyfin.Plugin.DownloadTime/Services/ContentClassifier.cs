@@ -74,11 +74,20 @@ public static class ContentClassifier
         // end in the word ("Secrets Revealed") are untouched; catches 17/17
         // of the live corpus.
         @"re:\brevealed\b\s*:",
+        // ---- recap vocabulary (rule 3) and behind-the-scenes vocabulary
+        // (rule 4). Every phrase here was scored against the 430-row labelled
+        // fixture and kept only at ZERO hits on SPECIAL-labelled titles;
+        // "road to" and "countdown to" were dropped for exactly that reason
+        // (they hit Street Outlaws episodes).
+        "story so far", "prequel", "origins", "look back", "retrospective", "farewell",
+        "hall of shame", "discussion", "bringing", "actor", "in the studio",
+        "tales from", "hours at", "b-roll", "vfx", "outtake", "table read",
+        "after hours", "secrets of", "aftermath", "moments", "celebration", "anniversary",
         // measured single-purpose additions (2026-08-05 corpus)
-        // "<subject> 101" primer shorts ("Blood Spatter 101", "Callouts 101").
-        // End-anchored and guarded so ordinary numbering ("Episode 101") is
-        // untouched.
-        "access all areas", @"re:(?<!\bepisode )\b101$",
+        // NOTE: a "<subject> 101" pattern shipped in 1.3.9.0 was REMOVED after
+        // the hand review labelled Street Outlaws' "Callouts 101" a genuine
+        // special — it was the rule stack's only false demotion.
+        "access all areas",
         "video commentary", "audio commentary", "compilation",
     };
 
@@ -100,12 +109,36 @@ public static class ContentClassifier
                 return ContentKind.Extra;
         }
 
+        // (a1) TheTVDB's per-episode "Special Category" tag, scraped from the
+        //      page we already fetch. Where a curator has tagged the item this
+        //      is the best signal available: measured 30 correct demotions and
+        //      8 correct protections with ZERO false demotions once the
+        //      episode-length gate below is applied.
+        var categories = SplitCategories(episode.SourceCategory);
+        if (categories.Count > 0)
+        {
+            if (categories.Any(c => ContentCategories.Contains(c)))
+            {
+                return ContentKind.Special;   // authoritative content
+            }
+            if (categories.Any(c => BonusCategories.Contains(c))
+                && !(episode.RuntimeMinutes is int tagRuntime
+                     && tagRuntime >= SeasonZeroBatches.EpisodeLengthMinutes))
+            {
+                return ContentKind.Extra;
+            }
+        }
+
         // (a2) TVmaze marks each special significant or insignificant, but that
         //      axis is significance to SERIES CONTINUITY, not bonus-vs-content:
         //      it files 60-minute crossover episodes ("Street Outlaws vs. Fast
         //      N' Loud", Grimm's "Bad Hair Day" parts) as insignificant too.
         //      So it only implies "extra" for items that are not
         //      episode-length; an episode-length item is still an episode.
+        //      MEASURED: ungated, this signal fires 49 times with 17 false
+        //      demotions — a 34.7% false-positive rate — and also kills Rick
+        //      and Morty's "Portal People". The runtime gate below is what
+        //      makes it safe; never let significance demote on its own.
         if (string.Equals(episode.SourceSignificance, InsignificantSpecial, StringComparison.OrdinalIgnoreCase))
         {
             var episodeLength = episode.RuntimeMinutes is int insigRuntime
@@ -154,6 +187,33 @@ public static class ContentClassifier
     /// <summary>TVmaze significance values carried on <see cref="RemoteEpisode.SourceSignificance"/>.</summary>
     public const string SignificantSpecial = "significant";
     public const string InsignificantSpecial = "insignificant";
+
+    /// <summary>TheTVDB special categories that denote bonus material.</summary>
+    public static readonly IReadOnlySet<string> BonusCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "behind the scenes/ makings of", "behind the scenes/makings of", "behind the scenes",
+        "bloopers", "cast interviews", "deleted scenes", "extended scenes",
+        "season recaps", "webisodes and shorts",
+    };
+
+    /// <summary>TheTVDB special categories that denote real content.</summary>
+    public static readonly IReadOnlySet<string> ContentCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "episodic special", "movies", "ovas", "pilots",
+    };
+
+    /// <summary>Splits the '; '-joined tag list and normalizes whitespace/case.</summary>
+    public static IReadOnlyList<string> SplitCategories(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            return Array.Empty<string>();
+        }
+        return category.Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .Select(c => string.Join(' ', c.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant())
+            .Where(c => c.Length > 0)
+            .ToList();
+    }
 
     public static bool MatchesExtraPattern(string? title, IReadOnlyList<string> patterns)
     {

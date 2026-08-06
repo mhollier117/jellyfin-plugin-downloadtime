@@ -166,7 +166,24 @@ public partial class TvdbScrapeFetcher : ITvdbSource
                     aired = AirTime.FromDate(d.Year, d.Month, d.Day);
                 }
 
-                episodes.Add(new RemoteEpisode(season, number, id, aired, season == 0, title));
+                // TheTVDB renders its crowd-sourced "Special Category" tags
+                // inline on this page (taxonomy/episode/3787). A row can carry
+                // several; keep them all.
+                string? category = null;
+                var labels = li.SelectNodes(".//span[contains(@class,'label-sunglow')]");
+                if (labels is not null)
+                {
+                    var values = labels
+                        .Select(l => HtmlEntity.DeEntitize(l.InnerText).Trim())
+                        .Where(v => v.Length > 0)
+                        .ToList();
+                    if (values.Count > 0)
+                    {
+                        category = string.Join("; ", values);
+                    }
+                }
+
+                episodes.Add(new RemoteEpisode(season, number, id, aired, season == 0, title, SourceCategory: category));
             }
         }
 

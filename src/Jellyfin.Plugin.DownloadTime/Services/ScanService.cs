@@ -276,21 +276,15 @@ public class ScanService
         var diff = DiffEngine.Diff(series.Episodes, catalog,
             new DiffOptions(_clock.UtcNow, settings.GraceHours, settings.IncludeSpecials));
 
-        // Repeated-prefix runs whose prefix carries production vocabulary are
-        // bonus material even without runtimes (audit 2026-08-05). Computed
-        // per series over the whole season-0 set, then applied to items the
-        // per-episode rules left as Specials.
-        var prefixKeys = PrefixGroups.DemotableKeys(catalog.Episodes, settings.Classifier);
-        ContentKind Classify(RemoteEpisode e)
-        {
-            var kind = ContentClassifier.Classify(e, settings.Classifier);
-            if (kind == ContentKind.Special && !e.RuntimeMinutes.HasValue
-                && PrefixGroups.KeyFor(e) is string key && prefixKeys.Contains(key))
-            {
-                return ContentKind.Extra;
-            }
-            return kind;
-        }
+        // Series-scoped season-0 analysis: protections first, then the batch
+        // and vocabulary-prefix rules. Every rule is validated against the
+        // hand-labelled fixture by GroundTruthRegressionTests.
+        var batches = SeasonZeroBatches.Analyze(
+            catalog.Episodes,
+            series.Name,
+            catalog.Episodes.Where(e => !e.IsSpecial && e.Title is not null).Select(e => e.Title!).ToList(),
+            settings.Classifier);
+        ContentKind Classify(RemoteEpisode e) => batches.Classify(e, settings.Classifier);
 
         // Extras are bonus material: when they are hidden from the report they
         // must not become virtual placeholders either (placeholder planning

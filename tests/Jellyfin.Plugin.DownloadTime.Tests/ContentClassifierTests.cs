@@ -213,17 +213,16 @@ public class ContentClassifierTests
     public void RevealedInOrdinaryTitles_StaysSpecial(string title)
         => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, 60), Opts()));
 
-    [Theory] // narrow, measured additions (v1.3.9)
-    [InlineData("Access All Areas")]
-    [InlineData("Blood Spatter 101")]
-    [InlineData("Callouts 101")]
-    public void MeasuredVocabularyAdditions_AreExtra(string title)
-        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp(title, null), Opts()));
+    [Fact]
+    public void MeasuredVocabularyAdditions_AreExtra()
+        => Assert.Equal(ContentKind.Extra, ContentClassifier.Classify(Sp("Access All Areas", null), Opts()));
 
-    [Theory] // "101" is END-anchored so ordinary numbering survives
+    [Theory] // the hand review labelled these genuine content; never hide them
     [InlineData("Episode 101")]
     [InlineData("Room 101 Revisited")]
-    [InlineData("Unaired Pilot")]      // genuine unreleased content, never hidden
+    [InlineData("Callouts 101")]       // Street Outlaws primer, labelled SPECIAL
+    [InlineData("Blood Spatter 101")]  // Dexter, labelled UNCERTAIN - stay conservative
+    [InlineData("Unaired Pilot")]      // genuine unreleased content
     public void MeasuredAdditions_DoNotOverReach(string title)
         => Assert.Equal(ContentKind.Special, ContentClassifier.Classify(Sp(title, null), Opts()));
 
